@@ -1,0 +1,241 @@
+#Region "handles"
+    'ON ROW UPDATED
+    Private Sub OnRowUpdated(ByVal sender As Object, ByVal e As OracleClient.OracleRowUpdatedEventArgs)
+        Try
+#If DEBUG Then
+            Console.WriteLine("  event args: (" & " command=" & e.Command.CommandText &
+                           " commandType=" & e.StatementType & " recordsAffected=" &
+                            " status=" & e.Status & ")")
+            Console.WriteLine("------------------------------------------------------------------------")
+#End If
+        Catch ex As Exception
+
+        End Try
+    End Sub
+    'ON ROW UPDATING
+    Private Sub OnRowUpdating(ByVal sender As Object, ByVal e As OracleClient.OracleRowUpdatingEventArgs)
+        Try
+            Dim currentRow = e.Row
+            Dim tableName = e.Row.Table.TableName
+            Dim table = e.Row.Table
+            Dim tableCols = table.Columns
+#If DEBUG Then
+            Console.WriteLine("TableName : [" & tableName & "]")
+            Console.WriteLine("  Changed Columns : ")
+#End If
+            Dim setWhoColumnsFlag As Boolean = False
+            Dim inportantFlag As Boolean = False
+            Dim current As Object
+            Dim original As Object
+            Dim colName As Object
+            If currentRow.RowState = DataRowState.Modified Then
+                For i = 0 To currentRow.ItemArray.Count - 1
+                    current = currentRow.Item(i, DataRowVersion.Current)
+                    original = currentRow.Item(i, DataRowVersion.Original)
+                    colName = tableCols(i).ColumnName
+                    If Not current.Equals(original) Then
+                        If tableName <> "CYG_T30F" Then
+                            If (colName = "表示順" OrElse colName = "LAST_UPDATED_BY" _
+                            OrElse colName = "LAST_UPDATE_DATE" OrElse colName = "LAST_UPDATE_PROGRAMID" _
+                            OrElse colName = "CREATED_BY" OrElse colName = "CREATION_DATE") _
+                            AndAlso (Not inportantFlag) Then
+                                inportantFlag = False
+                            Else
+                                inportantFlag = True
+                            End If
+                        Else
+                            If (colName = "LAST_UPDATED_BY" _
+                            OrElse colName = "LAST_UPDATE_DATE" OrElse colName = "LAST_UPDATE_PROGRAMID" _
+                            OrElse colName = "CREATED_BY" OrElse colName = "CREATION_DATE") _
+                            AndAlso (Not inportantFlag) Then
+                                inportantFlag = False
+                            Else
+                                inportantFlag = True
+                            End If
+                        End If
+
+                        setWhoColumnsFlag = True
+#If DEBUG Then
+                        If colName <> "QRコード" Then '20170518 FJN AN-TB ADD
+                            Console.WriteLine("      " & colName & ":" & original & "-->" & current)
+                        End If                '20170518 FJN AN-TB ADD
+#End If
+                        If "String".Equals(tableCols(i).DataType.Name) Then
+                            If IsDBNull(current) Then
+                                currentRow.Item(i) = " "
+                            ElseIf current Is Nothing OrElse String.IsNullOrEmpty(current.ToString.Trim) Then ' 20111215 modified by  ect lvlu
+                                currentRow.Item(i) = " "
+                            End If
+                        End If
+                    End If
+                Next
+                If (Not setWhoColumnsFlag) Then
+                    currentRow.RejectChanges()
+                    Exit Sub
+                End If
+                If (Not inportantFlag) Then
+                    'formatRowBeforeUpdate(currentRow)
+                    Exit Sub
+                End If
+                'formatRowBeforeUpdate(currentRow)
+            ElseIf currentRow.RowState = DataRowState.Added Then
+                formatRowBeforeUpdate(currentRow)
+            End If
+            If currentRow.RowState = DataRowState.Added Then
+                If tableCols.Contains("LAST_UPDATED_BY") Then
+                    currentRow.Item("CREATED_BY") = _オペレータ
+                End If
+                If tableCols.Contains("LAST_UPDATED_BY") Then
+                    currentRow.Item("CREATION_DATE") = String.Format("{0:yyyy/MM/dd HH:mm:ss}", DateTime.Now)
+                End If
+                If tableCols.Contains("LAST_UPDATED_BY") Then
+                    currentRow.Item("LAST_UPDATED_BY") = _オペレータ
+                End If
+                If tableCols.Contains("LAST_UPDATE_DATE") Then
+                    currentRow.Item("LAST_UPDATE_DATE") = String.Format("{0:yyyy/MM/dd HH:mm:ss}", DateTime.Now)
+                End If
+                If tableCols.Contains("LAST_UPDATE_PROGRAMID") Then
+                    currentRow.Item("LAST_UPDATE_PROGRAMID") = _Work_Program
+                End If
+                If tableCols.Contains("最終変更日") Then
+                    currentRow.Item("最終変更日") = String.Format("{0:yyyy/MM/dd}", Today)
+                End If
+            ElseIf currentRow.RowState = DataRowState.Modified Then
+                If tableCols.Contains("LAST_UPDATED_BY") Then
+                    currentRow.Item("LAST_UPDATED_BY") = _オペレータ
+                End If
+                If tableCols.Contains("LAST_UPDATE_DATE") Then
+                    currentRow.Item("LAST_UPDATE_DATE") = String.Format("{0:yyyy/MM/dd HH:mm:ss}", DateTime.Now)
+                End If
+                If tableCols.Contains("LAST_UPDATE_PROGRAMID") Then
+                    'If currentRow.Item("LAST_UPDATE_PROGRAMID").TRIM <> "CYG_T30_000E" Then            '20170608 FJN VAN-KV DEL
+                    If currentRow.Item("LAST_UPDATE_PROGRAMID").ToString.Trim <> "CYG_T30_000E" Then    '20170608 FJN VAN-KV ADD
+                        currentRow.Item("LAST_UPDATE_PROGRAMID") = _Work_Program
+                    End If
+                End If
+                If tableCols.Contains("最終変更日") Then
+                    currentRow.Item("最終変更日") = String.Format("{0:yyyy/MM/dd}", Today)
+                End If
+            End If
+#If DEBUG Then
+            Console.WriteLine("------------------------------------------------------------------------")
+#End If
+        Catch ex As Exception
+            Throw ex
+        End Try
+
+    End Sub
+#End Region
+
+#Region "Interface"
+    'test
+    Public Sub debug(ByVal str As String)
+        Console.WriteLine(str)
+        'Throw New Exception("heihei")
+    End Sub
+
+    Public Sub Dispose()
+        '-------------------------< @@111010 Added by Lihao 
+        Try
+            If Not Me.Transaction Is Nothing Then
+                Me.Transaction.Rollback()
+            End If
+        Catch ex As Exception
+        End Try
+        '------------------------- @@111010 Added by Lihao >
+
+        Try
+            Me.Connection.Close()
+        Catch ex As Exception
+        End Try
+        Try
+            Me.Connection.Dispose()
+        Catch ex As Exception
+        End Try
+    End Sub
+    ''' <summary>
+    ''' Begin transaction
+    ''' </summary>
+    ''' <remarks></remarks>
+    Public Sub Start()
+        If ConnectionState.Closed.Equals(Me.Connection.State) Then
+            OracleClient.OracleConnection.ClearPool(Me.Connection)
+            Me.Connection.Open()
+        End If
+        If Me.Transaction Is Nothing Then
+            Me.Transaction = Me.Connection.BeginTransaction(IsolationLevel.ReadCommitted)
+        Else
+            If Me.Transaction.Connection Is Nothing Then
+                Me.Transaction = Me.Connection.BeginTransaction(IsolationLevel.ReadCommitted)
+            End If
+        End If
+    End Sub
+    ''' <summary>
+    ''' Begin transaction
+    ''' </summary>
+    ''' <remarks></remarks>
+    Public Sub ReStart()
+        Try
+            Me.Rollback()
+        Catch ex As Exception
+
+        End Try
+        Me.Start()
+    End Sub
+    ''' <summary>
+    ''' Commit transaction
+    ''' </summary>
+    ''' <remarks></remarks>
+    Public Sub Commit()
+        If Me.Transaction Is Nothing Then
+            Throw New Exception("Transaction is nothing,call start function first.")
+        Else
+            Me.Transaction.Commit()
+            Me.Connection.Close()
+        End If
+    End Sub
+
+    ''' <summary>
+    ''' Rollback transaction
+    ''' </summary>
+    ''' <remarks></remarks>
+    Public Sub Rollback()
+        If Me.Transaction Is Nothing Then
+            Throw New Exception("Transaction is nothing,call start function first.")
+        Else
+            Me.Transaction.Rollback()
+            Me.Connection.Close()
+        End If
+    End Sub
+
+    ''' <summary>
+    ''' Get next value of sequence.if sequence does not exist,create this sequence then get the next value.
+    ''' </summary>
+    ''' <param name="seqId">Sequence id</param>
+    ''' <returns></returns>
+    ''' <remarks></remarks>
+    Public Function seq(ByVal seqId As String) As Long
+        seq = Nothing
+        Dim sql = "SELECT " & seqId & ".NEXTVAL AS SEQ FROM DUAL"
+        Try
+            seq = Value(sql)
+        Catch ex As OracleClient.OracleException
+            'ORA-02289: 順序が存在しません。
+            If 2289.Equals(ex.Code) Then
+                Dim newCon = New OracleClient.OracleConnection(Me._connectionStr)
+                newCon.Open()
+                Dim newCommand = newCon.CreateCommand()
+                Dim sql2 = "CREATE SEQUENCE " & seqId & " START WITH 1 INCREMENT BY 1 MINVALUE 1 MAXVALUE 999999999999 CYCLE"
+                newCommand.CommandText = sql2
+                newCommand.ExecuteNonQuery()
+                '20170810 ADDED BY XIAXUE BEGIN
+                sql = "SELECT " & seqId & ".NEXTVAL AS SEQ FROM DUAL"
+                seq = Value(sql)
+                '20170810 ADDED BY XIAXUE END
+            Else
+                Throw
+            End If
+        End Try
+    End Function
+
+   
