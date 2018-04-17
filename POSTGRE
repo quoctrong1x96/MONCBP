@@ -1,0 +1,470 @@
+Option Strict Off
+Option Explicit On
+Imports Npgsql
+Imports NpgsqlTypes
+'*******************************************************************************
+' System : 千代田グラビア全社統合システム
+' Title  : dbPostgre共通class
+' Version: R 2.0.0
+'-------------------------------------------------------------------------------
+' 新  規 :20160817 FJN VAN-KV  新規開発
+' 変  更 :20170503 FJN VAN-KV 【T_CHIYODA-2041】＜マンズ対応＞本番環境向けのDLL変更
+'*******************************************************************************
+Public Class DBPostgre
+
+    '****************************************************
+    '   オラクル用宣言（オブジェクト）
+    '****************************************************
+    Private WithEvents _adapter As NpgsqlDataAdapter
+    Private _connection As NpgsqlConnection
+    Private _transaction As NpgsqlTransaction
+    Private _command As NpgsqlCommand
+    Private _オペレータ As String = " "
+    Private _connectionStr As String = " "
+    Private _Work_Program As String = " "
+    Private _tableColCollections As Hashtable = New Hashtable
+#Region "New"
+    Sub New(ByVal connectionStr, ByVal オペレータ, ByVal Work_Program, Optional ByVal addHandlerFlag = True)
+        MyBase.New()
+        'connectionStr = "Server=manztest.ckgl6fof0gnd.ap-northeast-1.rds.amazonaws.com;Port=5432;Database=manztest;SSL Mode=Require;Trust Server Certificate=true;" & connectionStr  '20170503 FJN VAN-KV DEL
+        '20170503 FJN VAN-KV ADD START
+        Call C00_000XA_Result()
+        '--------------------------------------------------------------------------------------------------------------------
+        Dim C00_001XC = New DFW_C00_001X.C00_001XC
+        Result = C00_001XC.Init(IniDrive, IniFile, Computer_Name, Save_Serv, Save_User, Save_Pass, OraSession, OraDatabase, SW_Err)
+        If SW_Err = "1" Then
+            Exit Sub
+        End If
+        Dim strWhere As String = ""
+        Dim Sql_Code As Integer
+        strWhere = "KEY = '01'"
+        Call GEQ_M10M(Sql_Code, "", strWhere)
+        If Sql_Code <> 0 Then
+            Exit Sub
+        End If
+        If M10M_RecordCount = 0 Then
+            Exit Sub
+        End If
+        connectionStr = "Server=" & M10M_Dt.Rows(0).Item("マンズIPアドレス") & ";Port=5432;Database=" & M10M_Dt.Rows(0).Item("マンズデータベース") & ";SSL Mode=Require;Trust Server Certificate=true;" & connectionStr
+        '20170503 FJN VAN-KV ADD END
+        Me.Connection = New NpgsqlConnection
+        Me._connectionStr = connectionStr
+        Me.Connection.ConnectionString = connectionStr
+        Me._オペレータ = オペレータ
+        Me._Work_Program = Work_Program
+        If addHandlerFlag Then
+            AddHandler Me.Adapter.RowUpdating, AddressOf OnRowUpdating
+            AddHandler Me.Adapter.RowUpdated, AddressOf OnRowUpdated
+        End If
+    End Sub
+    Sub New(ByVal connection As NpgsqlConnection)
+        MyBase.New()
+        Me.Connection = connection
+        Try
+            If ConnectionState.Closed.Equals(Me.Connection.State) Then
+                Me.Connection.Open()
+            End If
+        Catch ex As Exception
+            Throw
+        End Try
+    End Sub
+    Public Property オペレータ() As String
+        Get
+            Return Me._オペレータ
+        End Get
+        Set(ByVal value As String)
+            Me._オペレータ = value
+        End Set
+    End Property
+
+    Public Property Work_Program() As String
+        Get
+            Return Me._Work_Program
+        End Get
+        Set(ByVal value As String)
+            Me._Work_Program = value
+        End Set
+    End Property
+
+    Friend Property Transaction() As NpgsqlTransaction
+        Get
+            Return Me._transaction
+        End Get
+        Set(ByVal value As NpgsqlTransaction)
+            Me._transaction = value
+            If Not Me.Command.Connection Is Nothing Then
+                Me.Command.Transaction = Me._transaction
+            End If
+            If ((Not (Me.Adapter) Is Nothing) _
+                            AndAlso (Not (Me.Adapter.DeleteCommand) Is Nothing)) Then
+                Me.Adapter.DeleteCommand.Transaction = Me._transaction
+            End If
+            If ((Not (Me.Adapter) Is Nothing) _
+                        AndAlso (Not (Me.Adapter.InsertCommand) Is Nothing)) Then
+                Me.Adapter.InsertCommand.Transaction = Me._transaction
+            End If
+            If ((Not (Me.Adapter) Is Nothing) _
+                        AndAlso (Not (Me.Adapter.UpdateCommand) Is Nothing)) Then
+                Me.Adapter.UpdateCommand.Transaction = Me._transaction
+            End If
+        End Set
+    End Property
+
+    Friend Property Connection() As NpgsqlConnection
+        Get
+            Return Me._connection
+        End Get
+        Set(ByVal value As NpgsqlConnection)
+            Me._connection = value
+            If Me.Command.Connection Is Nothing Then
+                Me.Command.Connection = value
+            End If
+            If (Not (Me.Adapter.InsertCommand) Is Nothing) Then
+                Me.Adapter.InsertCommand.Connection = value
+            End If
+            If (Not (Me.Adapter.DeleteCommand) Is Nothing) Then
+                Me.Adapter.DeleteCommand.Connection = value
+            End If
+            If (Not (Me.Adapter.UpdateCommand) Is Nothing) Then
+                Me.Adapter.UpdateCommand.Connection = value
+            End If
+        End Set
+    End Property
+    Friend Property Command() As NpgsqlCommand
+        Get
+            If Me._command Is Nothing Then
+                Me._command = Me._connection.CreateCommand
+            End If
+            Return Me._command
+        End Get
+        Set(ByVal value As NpgsqlCommand)
+            Me._command = value
+        End Set
+    End Property
+    Protected Friend ReadOnly Property Adapter() As NpgsqlDataAdapter
+        Get
+            If (Me._adapter Is Nothing) Then
+                Me._adapter = New NpgsqlDataAdapter
+            End If
+            Return Me._adapter
+        End Get
+    End Property
+#End Region
+
+#Region "handles"
+    'ON ROW UPDATED
+    Private Sub OnRowUpdated(ByVal sender As Object, ByVal e As NpgsqlRowUpdatedEventArgs)
+        Try
+#If DEBUG Then
+            Console.WriteLine("  event args: (" & " command=" & e.Command.CommandText &
+                           " commandType=" & e.StatementType & " recordsAffected=" &
+                            " status=" & e.Status & ")")
+            Console.WriteLine("------------------------------------------------------------------------")
+#End If
+        Catch ex As Exception
+
+        End Try
+    End Sub
+    'ON ROW UPDATING
+    Private Sub OnRowUpdating(ByVal sender As Object, ByVal e As NpgsqlRowUpdatingEventArgs)
+        Try
+            Dim currentRow = e.Row
+            Dim tableName = e.Row.Table.TableName
+            Dim table = e.Row.Table
+            Dim tableCols = table.Columns
+#If DEBUG Then
+            Console.WriteLine("TableName : [" & tableName & "]")
+            Console.WriteLine("  Changed Columns : ")
+#End If
+            Dim setWhoColumnsFlag As Boolean = False
+            Dim inportantFlag As Boolean = False
+            Dim current As Object
+            Dim original As Object
+            Dim colName As Object
+            If currentRow.RowState = DataRowState.Modified Then
+                For i = 0 To currentRow.ItemArray.Count - 1
+                    current = currentRow.Item(i, DataRowVersion.Current)
+                    original = currentRow.Item(i, DataRowVersion.Original)
+                    colName = tableCols(i).ColumnName
+                    If Not current.Equals(original) Then
+                        If (colName = "LAST_UPDATED_BY" _
+                        OrElse colName = "LAST_UPDATE_DATE" OrElse colName = "LAST_UPDATE_PROGRAMID" _
+                        OrElse colName = "CREATED_BY" OrElse colName = "CREATION_DATE") _
+                        AndAlso (Not inportantFlag) Then
+                            inportantFlag = False
+                        Else
+                            inportantFlag = True
+                        End If
+
+                        setWhoColumnsFlag = True
+#If DEBUG Then
+                        Console.WriteLine("      " & colName & ":" & original & "-->" & current)
+#End If
+                        If "String".Equals(tableCols(i).DataType.Name) Then
+                            If IsDBNull(current) Then
+                                currentRow.Item(i) = " "
+                            ElseIf current Is Nothing OrElse String.IsNullOrEmpty(current.ToString.Trim) Then ' 20111215 modified by  ect lvlu
+                                currentRow.Item(i) = " "
+                            End If
+                        End If
+                    End If
+                Next
+                If (Not setWhoColumnsFlag) Then
+                    currentRow.RejectChanges()
+                    Exit Sub
+                End If
+                If (Not inportantFlag) Then
+                    'formatRowBeforeUpdate(currentRow)
+                    Exit Sub
+                End If
+                'formatRowBeforeUpdate(currentRow)
+            ElseIf currentRow.RowState = DataRowState.Added Then
+                formatRowBeforeUpdate(currentRow)
+            End If
+            If currentRow.RowState = DataRowState.Added Then
+                If tableCols.Contains("LAST_UPDATED_BY") Then
+                    currentRow.Item("CREATED_BY") = _オペレータ
+                End If
+                If tableCols.Contains("LAST_UPDATED_BY") Then
+                    currentRow.Item("CREATION_DATE") = String.Format("{0:yyyy/MM/dd HH:mm:ss}", DateTime.Now)
+                End If
+                If tableCols.Contains("LAST_UPDATED_BY") Then
+                    currentRow.Item("LAST_UPDATED_BY") = _オペレータ
+                End If
+                If tableCols.Contains("LAST_UPDATE_DATE") Then
+                    currentRow.Item("LAST_UPDATE_DATE") = String.Format("{0:yyyy/MM/dd HH:mm:ss}", DateTime.Now)
+                End If
+                If tableCols.Contains("LAST_UPDATE_PROGRAMID") Then
+                    currentRow.Item("LAST_UPDATE_PROGRAMID") = _Work_Program
+                End If
+                If tableCols.Contains("最終変更日") Then
+                    currentRow.Item("最終変更日") = String.Format("{0:yyyy/MM/dd}", Today)
+                End If
+            ElseIf currentRow.RowState = DataRowState.Modified Then
+                If tableCols.Contains("LAST_UPDATED_BY") Then
+                    currentRow.Item("LAST_UPDATED_BY") = _オペレータ
+                End If
+                If tableCols.Contains("LAST_UPDATE_DATE") Then
+                    currentRow.Item("LAST_UPDATE_DATE") = String.Format("{0:yyyy/MM/dd HH:mm:ss}", DateTime.Now)
+                End If
+                If tableCols.Contains("LAST_UPDATE_PROGRAMID") Then
+                    currentRow.Item("LAST_UPDATE_PROGRAMID") = _Work_Program
+                End If
+                If tableCols.Contains("最終変更日") Then
+                    currentRow.Item("最終変更日") = String.Format("{0:yyyy/MM/dd}", Today)
+                End If
+            End If
+#If DEBUG Then
+            Console.WriteLine("------------------------------------------------------------------------")
+#End If
+        Catch ex As Exception
+            Throw ex
+        End Try
+
+    End Sub
+#End Region
+
+#Region "Interface"
+    'test
+    Public Sub debug(ByVal str As String)
+        Console.WriteLine(str)
+    End Sub
+
+    Public Sub Dispose()
+        '-------------------------
+        Try
+            If Not Me.Transaction Is Nothing Then
+                Me.Transaction.Rollback()
+            End If
+        Catch ex As Exception
+        End Try
+        '-------------------------
+
+        Try
+            Me.Connection.Close()
+        Catch ex As Exception
+        End Try
+        Try
+            Me.Connection.Dispose()
+        Catch ex As Exception
+        End Try
+    End Sub
+    ''' <summary>
+    ''' Begin transaction
+    ''' </summary>
+    ''' <remarks></remarks>
+    Public Sub Start()
+        If ConnectionState.Closed.Equals(Me.Connection.State) Then
+            NpgsqlConnection.ClearPool(Me.Connection)
+            Me.Connection.Open()
+        End If
+        If Me.Transaction Is Nothing Then
+            Me.Transaction = Me.Connection.BeginTransaction(IsolationLevel.ReadCommitted)
+        Else
+            If Me.Transaction.Connection Is Nothing Then
+                Me.Transaction = Me.Connection.BeginTransaction(IsolationLevel.ReadCommitted)
+            End If
+        End If
+        Call CreateInfoTable()
+    End Sub
+    ''' <summary>
+    ''' Begin transaction
+    ''' </summary>
+    ''' <remarks></remarks>
+    Public Sub ReStart()
+        Try
+            Me.Rollback()
+        Catch ex As Exception
+
+        End Try
+        Me.Start()
+    End Sub
+    ''' <summary>
+    ''' Commit transaction
+    ''' </summary>
+    ''' <remarks></remarks>
+    Public Sub Commit()
+        If Me.Transaction Is Nothing Then
+            Throw New Exception("Transaction is nothing,call start function first.")
+        Else
+            Me.Transaction.Commit()
+            Me.Connection.Close()
+        End If
+    End Sub
+
+    ''' <summary>
+    ''' Rollback transaction
+    ''' </summary>
+    ''' <remarks></remarks>
+    Public Sub Rollback()
+        If Me.Transaction Is Nothing Then
+            Throw New Exception("Transaction is nothing,call start function first.")
+        Else
+            Me.Transaction.Rollback()
+            Me.Connection.Close()
+        End If
+    End Sub
+
+    ''' <summary>
+    ''' Get next value of sequence.if sequence does not exist,create this sequence then get the next value.
+    ''' </summary>
+    ''' <param name="seqId">Sequence id</param>
+    ''' <returns></returns>
+    ''' <remarks></remarks>
+    Public Function seq(ByVal seqId As String) As Long
+        seq = Nothing
+        Dim sql = "SELECT nextval('" & seqId & "')"
+        Try
+            seq = Value(sql)
+        Catch ex As NpgsqlException
+            'ORA-02289: 順序が存在しません。
+            If 2289.Equals(ex.ErrorCode) Then
+                Dim newCon = New NpgsqlConnection(Me._connectionStr)
+                newCon.Open()
+                Dim newCommand = newCon.CreateCommand()
+                Dim sql2 = "CREATE SEQUENCE " & seqId & " START WITH 1 INCREMENT BY 1 MINVALUE 1 MAXVALUE 999999999999 CYCLE"
+                newCommand.CommandText = sql2
+                newCommand.ExecuteNonQuery()
+            Else
+                Throw
+            End If
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' Get the first column of the first row.
+    ''' </summary>
+    ''' <param name="sql">Oracle sql string.</param>
+    ''' <returns>The first column of the first row.</returns>
+    ''' <remarks></remarks>
+    Public Function Value(ByVal sql As String) As Object
+        Value = Nothing
+        If Me.Command.Connection.State = ConnectionState.Closed Then
+            Me.Command.Connection.Open()
+        End If
+        Me.Command.CommandText = sql
+        Me.Command.CommandTimeout = 0
+        Value = Me.Command.ExecuteScalar()
+    End Function
+
+    ''' <summary>
+    ''' Execute a sql.
+    ''' </summary>
+    ''' <param name="sql"></param>
+    ''' <remarks></remarks>
+    Public Sub executeSql(ByVal sql As String)
+        If Me.Command.Connection.State = ConnectionState.Closed Then
+            Me.Command.Connection.Open()
+        End If
+        InsertInfoTemp(sql)
+        Me.Command.CommandText = sql
+        Me.Command.CommandTimeout = 0
+        Me.Command.Transaction = Me.Transaction
+        Me.Command.ExecuteNonQuery()
+    End Sub
+
+    ''' <summary>
+    ''' Insert into manz_info_temp
+    ''' </summary>
+    ''' <param name="sql"></param>
+    ''' <remarks>
+    ''' 
+    ''' </remarks>
+    Public Sub InsertInfoTemp(ByVal sql As String)
+        If sql.ToUpper.Contains("DELETE") Then
+            If Me.Command.Connection.State = ConnectionState.Closed Then
+                Me.Command.Connection.Open()
+            End If
+            Me.Command.CommandText = "INSERT INTO manz_info_temp(""OPERATOR_CD"", ""PROGRAM_ID"") VALUES('" & オペレータ & "','" & Work_Program & "')"
+            Me.Command.CommandTimeout = 0
+            Me.Command.Transaction = Me.Transaction
+            Me.Command.ExecuteNonQuery()
+        End If
+    End Sub
+
+    ''' <summary>
+    ''' creaate new manz_info_temp table
+    ''' </summary>
+    ''' <remarks>
+    ''' 
+    ''' </remarks>
+    Private Sub CreateInfoTable()
+        If Me.Command.Connection.State = ConnectionState.Closed Then
+            Me.Command.Connection.Open()
+        End If
+        Me.Command.CommandText = "CREATE temp TABLE IF NOT EXISTS manz_info_temp (""OPERATOR_CD"" character varying(30), ""PROGRAM_ID"" character varying(30) ) ON COMMIT DELETE ROWS"
+        Me.Command.CommandTimeout = 0
+        Me.Command.Transaction = Me.Transaction
+        Me.Command.ExecuteNonQuery()
+    End Sub
+
+    ''' <summary>
+    ''' Lock row(s) of table.
+    ''' </summary>
+    ''' <param name="tableName">Table name</param>
+    ''' <param name="whereClause">Where clause with 'where'/'WHERE' begin or not.</param>
+    ''' <remarks></remarks>
+    Public Sub Lock(ByVal tableName As String, ByVal whereClause As String)
+        Dim sql = "select 'X' from " & tableName & " "
+        If whereClause <> "" Then
+            If whereClause.Contains("WHERE") OrElse whereClause.Contains("where") Then
+                sql &= whereClause
+            Else
+                sql &= "where " & whereClause
+            End If
+        End If
+        sql &= " FOR UPDATE NOWAIT"
+        executeSql(sql)
+    End Sub
+
+    ''' <summary>
+    ''' Lock row(s) of table.
+    ''' </summary>
+    ''' <param name="sql">Sql string without 'FOR UPDATE NOWAIT'</param>
+    ''' <remarks></remarks>
+    Public Sub Lock(ByVal sql As String)
+        sql &= " FOR UPDATE NOWAIT"
+        executeSql(sql)
+    End Sub
+
+    
