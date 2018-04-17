@@ -1,0 +1,367 @@
+''' <summary>
+    ''' Get dataTable.
+    ''' </summary>
+    ''' <param name="sql">Oracle sql string</param>
+    ''' <param name="tableName">if select rows from a table, this parameter is required.</param>
+    ''' <returns>A dataTable</returns>
+    ''' <remarks></remarks>
+    Public Function DataTable(ByVal sql As String, Optional ByVal tableName As String = "", Optional ByVal formatFlag As Boolean = False) As DataTable
+        DataTable = New DataTable
+        If Me.Command.Connection.State = ConnectionState.Closed Then
+            Me.Command.Connection.Open()
+        End If
+        Me.Command.CommandText = sql
+        Me.Command.CommandTimeout = 0
+        Me.Adapter.SelectCommand = Me.Command
+        Me.Adapter.Fill(DataTable)
+        If tableName <> "" Then
+            DataTable.TableName = tableName
+        End If
+        If formatFlag Then
+            formatRows(DataTable.Rows)
+        End If
+    End Function
+    ''' <summary>
+    ''' Get dataTable set to dataset.
+    ''' </summary>
+    ''' <param name="dataSet">dataSet</param>
+    ''' <param name="sql">Oracle sql string</param>
+    ''' <param name="tableName">this parameter is required.</param>
+    ''' <remarks></remarks>
+    Public Sub DataTable(ByRef dataSet As DataSet, ByVal sql As String, ByVal tableName As String, Optional ByVal formatFlag As Boolean = False)
+        Me.Command.CommandText = sql
+        Me.Command.CommandTimeout = 0
+        If Me.Command.Connection.State = ConnectionState.Closed Then
+            Me.Command.Connection.Open()
+        End If
+        Me.Adapter.SelectCommand = Me.Command
+        Me.Adapter.Fill(dataSet, tableName)
+        If formatFlag Then
+            formatRows(dataSet.Tables(tableName).Rows)
+        End If
+    End Sub
+
+    ''' <summary>
+    ''' Get dataTable from DB,but no row.
+    ''' </summary>
+    ''' <param name="tableName">Table name</param>
+    ''' <returns>DataTable</returns>
+    ''' <remarks></remarks>
+    Public Function DtWithoutRows(ByVal tableName As String) As DataTable
+        DtWithoutRows = New DataTable
+        Dim sql = "select * from " & tableName & " where 1 = 2"
+        DtWithoutRows = DataTable(sql, tableName)
+    End Function
+
+    ''' <summary>
+    ''' Get one row from DB
+    ''' </summary>
+    ''' <param name="sql">Sql string</param>
+    ''' <returns>DataRow</returns>
+    ''' <remarks></remarks>
+    Public Function Row(ByVal sql As String) As DataRow
+        Row = Nothing
+        If Me.Command.Connection.State = ConnectionState.Closed Then
+            Me.Command.Connection.Open()
+        End If
+        Dim dt As DataTable = New DataTable
+        Me.Command.CommandText = sql
+        Me.Command.CommandTimeout = 0
+        Me.Adapter.SelectCommand = Me.Command
+        Me.Adapter.Fill(dt)
+        If dt.Rows.Count > 0 Then
+            Row = dt.Rows.Item(0)
+        End If
+    End Function
+
+    ''' <summary>
+    ''' Update changes of DataTable to DB.
+    ''' </summary>
+    ''' <param name="dataTable">DataTable with changes.</param>
+    ''' <param name="tableName">Table name in DB</param>
+    ''' <param name="overWriteChangesFlag">if true,update with primary keys,otherwise update with all columns as condition</param>
+    ''' <returns>Count of how many rows been updated.</returns>
+    ''' <remarks></remarks>
+    Public Function Update(ByRef dataTable As DataTable, ByVal tableName As String, Optional ByVal overWriteChangesFlag As Boolean = True) As Integer
+        Update = 0
+        If Me.Connection.State = ConnectionState.Closed Then
+            Me.Connection.Open()
+        End If
+        executeSql("INSERT INTO manz_info_temp(""OPERATOR_CD"", ""PROGRAM_ID"") VALUES('" & オペレータ & "','" & Work_Program & "')")
+        Dim sqlStr = getSelectSql(tableName, dataTable)
+        Dim command As NpgsqlCommand = New NpgsqlCommand
+        command.CommandText = sqlStr
+        command.CommandTimeout = 0
+        command.Connection = Me.Connection
+        command.Transaction = Me.Transaction
+        Using da As NpgsqlDataAdapter = New NpgsqlDataAdapter
+            AddHandler da.RowUpdating, AddressOf OnRowUpdating
+            AddHandler da.RowUpdated, AddressOf OnRowUpdated
+            da.SelectCommand = command
+            Dim cmdBuilder As NpgsqlCommandBuilder = New NpgsqlCommandBuilder(da)
+            If overWriteChangesFlag Then
+                cmdBuilder.ConflictOption = ConflictOption.OverwriteChanges
+            End If
+            If dataTable IsNot Nothing Then
+                Update = da.Update(dataTable)
+            End If
+        End Using
+    End Function
+
+    ''' <summary>
+    ''' Create a oracle command.
+    ''' </summary>
+    ''' <returns></returns>
+    ''' <remarks></remarks>
+    Public Function CreateCommand(Optional ByVal withTransaction As Boolean = True) As NpgsqlCommand
+        CreateCommand = Me.Connection.CreateCommand
+        If withTransaction Then
+            If Me.Transaction IsNot Nothing Then
+                CreateCommand.Transaction = Me.Transaction
+            End If
+        End If
+    End Function
+#Region "Procedure"
+    ''' <summary>
+    ''' Return a input string Type OracleParameter
+    ''' </summary>
+    ''' <param name="Pname">Name</param>
+    ''' <param name="Size">Size</param>
+    ''' <param name="value">Value</param>
+    ''' <returns>OracleParameter</returns>
+    ''' <remarks></remarks>
+    Public Function NewInputStrPara(ByVal Pname As String,
+                                    ByVal Size As Integer,
+                                    ByVal value As Object)
+        NewInputStrPara = NewPara(Pname, NpgsqlDbType.Varchar, Size, ParameterDirection.Input, value)
+    End Function
+    ''' <summary>
+    ''' Return a output string Type OracleParameter
+    ''' </summary>
+    ''' <param name="Pname">Name</param>
+    ''' <param name="Size">Size</param>
+    ''' <param name="value">Value</param>
+    ''' <returns>OracleParameter</returns>
+    ''' <remarks></remarks>
+    Public Function NewOutputStrPara(ByVal Pname As String,
+                                    ByVal Size As Integer,
+                                    ByVal value As Object)
+        NewOutputStrPara = NewPara(Pname, NpgsqlDbType.Varchar, Size, ParameterDirection.Output, value)
+    End Function
+    ''' <summary>
+    ''' Return a input number Type OracleParameter
+    ''' </summary>
+    ''' <param name="Pname">Name</param>
+    ''' <param name="Size">Size</param>
+    ''' <param name="value">Value</param>
+    ''' <returns>OracleParameter</returns>
+    ''' <remarks></remarks>
+    Public Function NewInputNumPara(ByVal Pname As String,
+                                    ByVal Size As Integer,
+                                    ByVal value As Object)
+        NewInputNumPara = NewPara(Pname, NpgsqlDbType.Numeric, Size, ParameterDirection.Input, value)
+    End Function
+    ''' <summary>
+    ''' Return a output number Type OracleParameter
+    ''' </summary>
+    ''' <param name="Pname">Name</param>
+    ''' <param name="Size">Size</param>
+    ''' <param name="value">Value</param>
+    ''' <returns>OracleParameter</returns>
+    ''' <remarks></remarks>
+    Public Function NewOutputNumPara(ByVal Pname As String,
+                                    ByVal Size As Integer,
+                                    ByVal value As Object)
+        NewOutputNumPara = NewPara(Pname, NpgsqlDbType.Numeric, Size, ParameterDirection.Output, value)
+    End Function
+    ''' <summary>
+    ''' Return a OracleParameter
+    ''' </summary>
+    ''' <param name="Pname">Name</param>
+    ''' <param name="OracleType">Type</param>
+    ''' <param name="Size">Size</param>
+    ''' <param name="InputOutput">Input or output parameter</param>
+    ''' <param name="value">Value</param>
+    ''' <returns>OracleParameter</returns>
+    ''' <remarks></remarks>
+    Public Function NewPara(ByVal Pname As String,
+                            ByVal OracleType As NpgsqlDbType,
+                            ByVal Size As Integer,
+                            ByVal InputOutput As ParameterDirection,
+                            ByVal value As Object)
+        NewPara = New NpgsqlParameter
+        NewPara.ParameterName = Pname
+        NewPara.OracleType = OracleType
+        NewPara.Size = Size
+        NewPara.Direction = InputOutput
+        NewPara.Value = value
+    End Function
+    ''' <summary>
+    ''' Call a plsql procedure.
+    ''' </summary>
+    ''' <param name="ProcedureName">Procedure name</param>
+    ''' <param name="Paras">Array of OracleParameter,use functions like newOutputStrPara... to new OracleParameter</param>
+    ''' <remarks></remarks>
+    Public Sub CallProcedure(ByVal ProcedureName As String,
+                           ByRef Paras() As NpgsqlParameter)
+
+        If Me.Connection.State = ConnectionState.Closed Then
+            Me.Connection.Open()
+        End If
+        executeSql("INSERT INTO manz_info_temp(""OPERATOR_CD"", ""PROGRAM_ID"") VALUES('" & オペレータ & "','" & Work_Program & "')")
+        Me.Command.CommandText = ProcedureName
+        Me.Command.CommandTimeout = 0
+        Me.Command.CommandType = CommandType.StoredProcedure
+        For Each p As NpgsqlParameter In Paras
+            Me.Command.Parameters.Add(p)
+        Next
+        Me.Command.Transaction = Me.Transaction
+
+        Try
+            Me.Command.ExecuteNonQuery()
+        Catch ex As Exception
+            Me.Command.CommandType = CommandType.Text
+            Me.Command.Parameters.Clear()
+            Throw
+        End Try
+        Me.Command.CommandType = CommandType.Text
+        Me.Command.Parameters.Clear()
+    End Sub
+
+    Public Sub CallProcedureS(ByVal ProcedureName As String,
+                         ByRef Paras() As NpgsqlParameter)
+
+        If Me.Connection.State = ConnectionState.Closed Then
+            Me.Connection.Open()
+        End If
+        executeSql("INSERT INTO manz_info_temp(""OPERATOR_CD"", ""PROGRAM_ID"") VALUES('" & オペレータ & "','" & Work_Program & "')")
+        Me.Command.CommandText = ProcedureName
+        Me.Command.CommandTimeout = 0
+        For Each p As NpgsqlParameter In Paras
+            Me.Command.Parameters.Add(p)
+        Next
+        Me.Command.Transaction = Me.Transaction
+        Try
+            Me.Command.ExecuteNonQuery()
+        Catch ex As Exception
+            Me.Command.CommandType = CommandType.Text
+            Me.Command.Parameters.Clear()
+            Throw
+        End Try
+        Me.Command.CommandType = CommandType.Text
+        Me.Command.Parameters.Clear()
+    End Sub
+
+#End Region
+#End Region
+
+#Region "Private Functions"
+    Private Function getCol(ByVal tableName As String) As DataColumnCollection
+        If Me._tableColCollections.ContainsKey(tableName) Then
+            getCol = Me._tableColCollections.Item(tableName)
+        Else
+            Dim sql = "select * from " & tableName & " where 1 = 2"
+            Dim dt As DataTable = DataTable(sql, tableName)
+            Me._tableColCollections.Add(tableName, dt.Columns)
+            getCol = dt.Columns
+        End If
+    End Function
+    Private Function getSelectSql(ByVal tableName As String, ByVal dataTable As DataTable) As String
+        getSelectSql = ""
+        Dim colCollention = getCol(tableName)
+        Dim cols = dataTable.Columns
+        Dim keys = dataTable.PrimaryKey
+        Dim col = Nothing
+        Dim flag = False
+        getSelectSql = "SELECT "
+        For i As Integer = 0 To cols.Count - 1
+            col = cols.Item(i)
+            If colCollention.Contains(col.ColumnName) Then
+                If flag Then
+                    getSelectSql &= " , "
+                End If
+                getSelectSql &= """" & col.ColumnName & """"
+                flag = True
+            End If
+        Next
+        getSelectSql &= " FROM " & tableName
+    End Function
+    'TRIM OR SET DEFAULT VALUE OF COLUMNS
+    Private Function formatRows(ByRef dataRowCollection As DataRowCollection)
+        formatRows = False
+        For Each row As DataRow In dataRowCollection
+            formatRow(row)
+            row.AcceptChanges()
+        Next
+        formatRows = True
+    End Function
+    Private Sub formatRowBeforeUpdate(ByRef row As DataRow)
+        Dim dataType As String = ""
+        Dim value As Object
+        For i = 0 To row.ItemArray.Length - 1
+            dataType = row.Table.Columns.Item(i).DataType.Name
+            value = row.ItemArray(i)
+            If "String".Equals(dataType) Then
+                row.Item(i) = toStr(row.Item(i), True)
+            End If
+        Next
+    End Sub
+    Public Sub formatRow(ByRef row As DataRow)
+        Dim dataType As String = ""
+        Dim value As Object
+        For i = 0 To row.ItemArray.Length - 1
+            dataType = row.Table.Columns.Item(i).DataType.Name
+            value = row.ItemArray(i)
+            If "String".Equals(dataType) Then
+                row.Item(i) = toStr(row.Item(i))
+            End If
+        Next
+    End Sub
+    Public Sub formatRowForNewRow(ByRef row As DataRow)
+        Dim dataType As String = ""
+        Dim value As Object
+        For i = 0 To row.ItemArray.Length - 1
+            dataType = row.Table.Columns.Item(i).DataType.Name
+            value = row.ItemArray(i)
+            If "String".Equals(dataType) Then
+                row.Item(i) = toStr(row.Item(i))
+            ElseIf "Decimal".Equals(dataType) Then
+                row.Item(i) = toNum(row.Item(i))
+            End If
+        Next
+    End Sub
+    Private Function toStr(ByVal obj As Object, Optional ByVal defaultSpace As Boolean = False)
+        toStr = ""
+        If defaultSpace Then
+            toStr = " "
+            If toStr.Equals(obj) Then
+                Return toStr
+            End If
+        End If
+        Try
+            If IsDBNull(obj) Then
+                Return toStr
+            ElseIf obj Is Nothing Then
+                Return toStr
+            ElseIf "".Equals(obj.ToString.Trim) Then
+                Return toStr.ToString.Replace("　", " ")
+            Else
+                Return obj.ToString.Trim
+            End If
+        Catch ex As Exception
+            Return toStr
+        End Try
+    End Function
+    Private Function toNum(ByVal obj As Object)
+        toNum = 0
+        If IsDBNull(obj) Then
+            Return toNum
+        ElseIf obj Is Nothing Then
+            Return toNum
+        Else
+            Return obj
+        End If
+    End Function
+
+#End Region
+End Class
