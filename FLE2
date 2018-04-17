@@ -1,0 +1,226 @@
+#Region "Control Numberic In FlexGrid"
+''' <summary>
+''' Control Input number in column of FlexGrid
+''' </summary>
+Public Class NumbericInFlexGrid
+    Inherits C1NumericEdit
+
+#Region "Property"
+    ''' <summary>
+    ''' Setting max value when input
+    ''' </summary>
+    Private _MaxValue As Decimal = 0
+    ''' <summary>
+    ''' Property Setting max value when input
+    ''' </summary>
+    Public Overloads Property MaxValue() As Decimal
+        Get
+            Return _MaxValue
+        End Get
+        Set(ByVal value As Decimal)
+            _MaxValue = value
+        End Set
+    End Property
+
+    ''' <summary>
+    ''' Setting min value when input
+    ''' </summary>
+    Private _MinValue As Decimal = 0
+    ''' <summary>
+    ''' Property Setting min value when input
+    ''' </summary>
+    Public Overloads Property MinValue() As Decimal
+        Get
+            Return _MinValue
+        End Get
+        Set(ByVal value As Decimal)
+            _MinValue = value
+        End Set
+    End Property
+
+    ''' <summary>
+    ''' Setting Decimal Places when input
+    ''' </summary>
+    Private _DecimalPlaces As Integer = 0
+    ''' <summary>
+    ''' Setting Decimal Places when input
+    ''' </summary>
+    Public Overloads Property DecimalPlaces() As Integer
+        Get
+            Return _DecimalPlaces
+        End Get
+        Set(ByVal value As Integer)
+            _DecimalPlaces = value
+        End Set
+    End Property
+    ''' <summary>
+    ''' Setting value of Decimal Places when input
+    ''' </summary>
+    Private _DecimalValue As Integer = 0
+
+#End Region
+    Public Sub New()
+        MyBase.New()
+    End Sub
+    ''' <summary>
+    ''' create value of Decimal Places
+    ''' </summary>
+    Protected Overrides Sub OnCreateControl()
+
+        _DecimalValue = CInt(("0").PadLeft(DecimalPlaces, "9"))
+        '-------------------------------------------------------
+        MyBase.OnCreateControl()
+
+    End Sub
+    ''' <summary>
+    ''' Up Down button in number
+    ''' </summary>
+    Protected Overrides Sub OnUpDownButtonClick(e As UpDownButtonClickEventArgs)
+        If IsDBNull(Me.Value) = False Then
+            Dim strValue As String = Me.Value
+            Dim strTemp(2) As String
+            Dim numTemp(2) As Decimal
+            '--------------------------------
+            If strValue.ToString.IndexOf(".") > 0 Then
+                strTemp = strValue.ToString.Split(".")
+            Else
+                strTemp(0) = strValue.ToString
+                strTemp(1) = "0"
+            End If
+            '--------------------------------
+            numTemp(0) = CDec(strTemp(0))
+            numTemp(1) = CDec(strTemp(1))
+            '--------------------------------
+            If e.Delta > 0 Then
+                If numTemp(0) >= MaxValue Then
+                    Return
+                End If
+            Else
+                If numTemp(0) <= MinValue Then
+                    Return
+                End If
+            End If
+        End If
+        '--------------------------------
+        MyBase.OnUpDownButtonClick(e)
+    End Sub
+
+    ''' <summary>
+    ''' event KeyPress of control numberic
+    ''' </summary>
+    Protected Overrides Sub OnKeyPress(e As KeyPressEventArgs)
+
+        Select Case e.KeyChar
+            Case "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"
+                GoTo OnKeyPress_001
+            Case Else
+                e.Handled = False
+                GoTo OnKeyPress_End
+        End Select
+OnKeyPress_001:
+        '------------------------------------------------------------
+        If (IsDBNull(Me.Value) = False) Then
+            Dim strTemp(2) As String
+            Dim numTemp(2) As Decimal
+            Dim strText As String = ""
+            Dim strValue As String = ""
+            Dim strSelection As String = ""
+            Dim numIndex As Integer = Me.SelectionStart
+            Dim intLengthSelect As Integer = 0
+            '-------------------------------------------------------
+            strValue = Me.Value
+            strText = Me.Text
+            numIndex = Me.SelectionStart
+            intLengthSelect = Me.SelectionLength
+            '-------------------------------------------------------
+            strSelection = strText.Substring(0, numIndex)
+            '-------------------------------------------------------
+            If strValue.ToString.IndexOf(".") > 0 Then
+                strTemp = strValue.ToString.Split(".")
+            Else
+                strTemp(0) = strValue.ToString
+                strTemp(1) = "0"
+            End If
+            '-------------------------------------------------------
+            If RTrim(strTemp(0)) = "" Then
+                strTemp(0) = "0"
+            End If
+            If RTrim(strTemp(1)) = "" Then
+                strTemp(1) = "0"
+            End If
+            '-------------------------------------------------------
+            numTemp(0) = CDec(strTemp(0))
+            numTemp(1) = CDec(strTemp(1))
+            '-------------------------------------------------------
+            If strSelection.IndexOf(".") > -1 Then
+                'compare and check the number of decimal characters
+                If numTemp(1) >= _DecimalValue Then
+                    e.Handled = True
+                End If
+            Else
+                'compare and check the number of characters integer part
+                If strValue >= 0 Then
+                    'compare and check maxValue
+                    If (numTemp(0) >= MaxValue) _
+                        OrElse (CStr(numTemp(0)).Length >= CStr(MaxValue).Length) Then
+                        If intLengthSelect = 0 Then
+                            e.Handled = True
+                        End If
+                    End If
+                Else
+                    'compare and check minValue
+                    If (numTemp(0) <= MinValue) _
+                        OrElse (CStr(numTemp(0)).Length >= CStr(MinValue).Length) Then
+                        If intLengthSelect = 0 Then
+                            e.Handled = True
+                        End If
+                    End If
+                End If
+            End If
+        End If
+OnKeyPress_End:
+        MyBase.OnKeyPress(e)
+    End Sub
+    ''' <summary>
+    ''' event Leave of control numberic
+    ''' </summary>
+    Protected Overrides Sub OnLeave(e As EventArgs)
+
+        Dim gC1FlexGrid As C1FlexGrid = DirectCast(Me.Parent, C1FlexGrid)
+        '---------------------------------------
+        AddHandler gC1FlexGrid.LeaveCell, AddressOf C1FlexGrid1_LeaveCell
+        '---------------------------------------
+        MyBase.OnLeave(e)
+
+    End Sub
+    ''' <summary>
+    ''' setting envent LeaveCell C1FlexGrid
+    ''' </summary>
+    Private Sub C1FlexGrid1_LeaveCell(sender As Object, e As EventArgs)
+
+        Dim cellRG As CellRange
+        Dim gC1FlexGrid As C1FlexGrid = DirectCast(sender, C1FlexGrid)
+        '-----------------------------------------------------
+        cellRG = gC1FlexGrid.GetCellRange(gC1FlexGrid.RowSel, gC1FlexGrid.ColSel)
+        '-----------------------------------------------------
+        If IsDBNull(gC1FlexGrid(gC1FlexGrid.RowSel, gC1FlexGrid.ColSel)) = False Then
+            If IsNumeric(gC1FlexGrid(gC1FlexGrid.RowSel, gC1FlexGrid.ColSel)) = False Then
+                GoTo C1FlexGrid1_LeaveCell_END
+            End If
+            '------------------------------------------------------------
+            If gC1FlexGrid(gC1FlexGrid.RowSel, gC1FlexGrid.ColSel) < 0 Then
+                'set ForeColor = Red when value input < 0
+                cellRG.StyleNew.ForeColor = Color.Red
+            Else
+                'set ForeColor = WindowText when value input > 0
+                cellRG.StyleNew.ForeColor = System.Drawing.SystemColors.WindowText
+            End If
+        End If
+        '---------------------------------------------------------------
+C1FlexGrid1_LeaveCell_END:
+        RemoveHandler gC1FlexGrid.LeaveCell, AddressOf C1FlexGrid1_LeaveCell
+
+    End Sub
+
+End Class
+#End Region
