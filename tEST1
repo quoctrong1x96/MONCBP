@@ -1,0 +1,143 @@
+Option Strict Off
+Option Explicit On
+'*******************************************************************************
+' System : 千代田グラビア全社統合システム
+' Title  : db共通class
+' Version: R 2.0.0
+'-------------------------------------------------------------------------------
+' 新  規 : 2010/02/01 ECT NIUJUNKAI      新規開発
+' 変  更 : 20150930 FJN VAN-KV【0428】＜仕様変更＞トリガーおよびジャーナルテーブル全般
+' 変  更 : 20160516 64bit対応
+' 変  更 : 20170206 ECT YUANCHAO 【0848】<仕様変更>CYG_J11Fのジャーナルを追加
+' 変  更 : 20170518 QRコードのチェックのロジックを追加
+' 変  更 : 20170608 FJN VAN-KV NULL値をTRIM時、エラーが発生されました。
+' 変  更 : 20170810 ECT XIAXUE DB SEQの取得ロジックを修正する
+' 変  更 : 20170913 ECT XIAXUE getSelectSqlスピード改善
+'*******************************************************************************
+Public Class DBHelper
+    'Inherits Global.System.ComponentModel.Component
+    '****************************************************
+    '   オラクル用宣言（オブジェクト）
+    '****************************************************
+    Private WithEvents _adapter As Global.System.Data.OracleClient.OracleDataAdapter
+    Private _connection As Global.System.Data.OracleClient.OracleConnection
+    Private _transaction As Global.System.Data.OracleClient.OracleTransaction
+    Private _command As Global.System.Data.OracleClient.OracleCommand
+    Private _オペレータ As String = " "
+    Private _connectionStr As String = " "
+    Private _Work_Program As String = " "
+    Private _tableColCollections As Hashtable = New Hashtable
+#Region "New"
+    Sub New(ByVal connectionStr, ByVal オペレータ, ByVal Work_Program, Optional ByVal addHandlerFlag = True)
+        MyBase.New()
+        Me.Connection = New OracleClient.OracleConnection(connectionStr)
+        'Try
+        '    Me.Connection.Open()
+        'Catch ex As Exception
+        '    Throw
+        'End Try
+        Me._connectionStr = connectionStr
+        Me._オペレータ = オペレータ
+        Me._Work_Program = Work_Program
+        If addHandlerFlag Then
+            AddHandler Me.Adapter.RowUpdating, AddressOf OnRowUpdating
+            AddHandler Me.Adapter.RowUpdated, AddressOf OnRowUpdated
+        End If
+    End Sub
+    Sub New(ByVal connection As OracleClient.OracleConnection)
+        MyBase.New()
+        Me.Connection = connection
+        Try
+            If ConnectionState.Closed.Equals(Me.Connection.State) Then
+                Me.Connection.Open()
+            End If
+        Catch ex As Exception
+            Throw
+        End Try
+    End Sub
+
+    Public Property オペレータ() As String
+        Get
+            Return Me._オペレータ
+        End Get
+        Set(ByVal value As String)
+            Me._オペレータ = value
+        End Set
+    End Property
+
+    Public Property Work_Program() As String
+        Get
+            Return Me._Work_Program
+        End Get
+        Set(ByVal value As String)
+            Me._Work_Program = value
+        End Set
+    End Property
+
+    Friend Property Transaction() As Global.System.Data.OracleClient.OracleTransaction
+        Get
+            Return Me._transaction
+        End Get
+        Set(ByVal value As Global.System.Data.OracleClient.OracleTransaction)
+            Me._transaction = value
+            If Not Me.Command.Connection Is Nothing Then
+                Me.Command.Transaction = Me._transaction
+            End If
+            If ((Not (Me.Adapter) Is Nothing) _
+                            AndAlso (Not (Me.Adapter.DeleteCommand) Is Nothing)) Then
+                Me.Adapter.DeleteCommand.Transaction = Me._transaction
+            End If
+            If ((Not (Me.Adapter) Is Nothing) _
+                        AndAlso (Not (Me.Adapter.InsertCommand) Is Nothing)) Then
+                Me.Adapter.InsertCommand.Transaction = Me._transaction
+            End If
+            If ((Not (Me.Adapter) Is Nothing) _
+                        AndAlso (Not (Me.Adapter.UpdateCommand) Is Nothing)) Then
+                Me.Adapter.UpdateCommand.Transaction = Me._transaction
+            End If
+        End Set
+    End Property
+
+    Friend Property Connection() As Global.System.Data.OracleClient.OracleConnection
+        Get
+            Return Me._connection
+        End Get
+        Set(ByVal value As Global.System.Data.OracleClient.OracleConnection)
+            Me._connection = value
+            If Me.Command.Connection Is Nothing Then
+                Me.Command.Connection = value
+            End If
+            If (Not (Me.Adapter.InsertCommand) Is Nothing) Then
+                Me.Adapter.InsertCommand.Connection = value
+            End If
+            If (Not (Me.Adapter.DeleteCommand) Is Nothing) Then
+                Me.Adapter.DeleteCommand.Connection = value
+            End If
+            If (Not (Me.Adapter.UpdateCommand) Is Nothing) Then
+                Me.Adapter.UpdateCommand.Connection = value
+            End If
+        End Set
+    End Property
+    Friend Property Command() As Global.System.Data.OracleClient.OracleCommand
+        Get
+            If Me._command Is Nothing Then
+                Me._command = Me._connection.CreateCommand
+            End If
+            Return Me._command
+        End Get
+        Set(ByVal value As Global.System.Data.OracleClient.OracleCommand)
+            Me._command = value
+        End Set
+    End Property
+    Protected Friend ReadOnly Property Adapter() As Global.System.Data.OracleClient.OracleDataAdapter
+        Get
+            If (Me._adapter Is Nothing) Then
+                Me._adapter = New OracleClient.OracleDataAdapter
+            End If
+            Return Me._adapter
+        End Get
+    End Property
+#End Region
+
+
+End Class
