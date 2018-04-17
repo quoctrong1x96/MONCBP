@@ -1,0 +1,441 @@
+Imports System.Text
+Imports C1.Win.C1FlexGrid
+Imports C1.Win.C1Input
+Imports System.Windows.Forms
+Imports System.Drawing
+
+'*******************************************************************************
+' System : マンズ業務管理システム (MANZ)
+' Title  : FlexGrid
+' Version: R 1.0.0
+'-------------------------------------------------------------------------------
+' 変 更  : 20170206 FJN VAN-KV  「DateEdit」項目のEmptyAsNullの属性をTrueに変更しました。
+' 変 更  : 20170303 FJN VAN-KV 【MANZ-171】<不具合>受注確定入力画面_明細部の回答納期がDELキーでクリアできません。
+' 変 更 :  20170828 FJN DAN-TN   管理台帳1042＜納品＞ECT_20170811_FJN_＜新規開発＞品目マスタ（一括登録のみ）
+' 変 更 :  20171010 FJN DAN-TN   T_CHIYODA-2677 【0989】<新規開発>受注入力【商品仕入】
+'*******************************************************************************
+Public Class FlexGridCommon
+    Public Sub New()
+    End Sub
+
+    ''' <summary>
+    ''' Setting ImeMode for control input
+    ''' </summary>
+    Private imeImeMode As ImeMode
+    ''' <summary>
+    ''' Property Setting ImeMode for control input
+    ''' </summary>
+    Private Overloads Property ImeMode() As ImeMode
+        Get
+            Return imeImeMode
+        End Get
+        Set(ByVal value As ImeMode)
+            imeImeMode = value
+        End Set
+    End Property
+
+    ''' <summary>
+    ''' Add Button Search In Column Of FlexGrid
+    ''' </summary>
+    ''' <param name="flexFlexGrid"></param>
+    ''' <returns></returns>
+    Public Function AddButtonInColumn(ByVal flexFlexGrid As C1FlexGrid,
+                                      ByVal objClass As Object,
+                                      Optional ByVal rowIndex As Integer = 1,
+                                      Optional ByVal colIndex As Integer = 0) As ArrayList
+
+        Dim btnSearch As Button
+        Dim intColumnIndex As Integer = 0
+        Dim returnValue As New ArrayList()
+        '------------------------------------------------------
+        With flexFlexGrid
+            For intCol As Integer = colIndex To flexFlexGrid.Cols.Count - 1
+                If RTrim(.Cols(intCol).Name) = "" Then
+                    Continue For
+                End If
+                '---------------------------------------------------------------
+                If Mid(.Cols(intCol).Name, 1, 2) <> "b_" Then
+                    Continue For
+                End If
+                '----------------------------------------------------------------
+                intColumnIndex = SearchColumnIndex(flexFlexGrid, .Cols(intCol).Name)
+                '----------------------------------------------------------------
+                '20171010 FJN DAN-TN ADD START 
+                If .Cols(intCol).Name = "b_Plus" Then
+                    For intRow As Integer = rowIndex To flexFlexGrid.Rows.Count - 1
+                        If flexFlexGrid.Cols.IndexOf("isNode") > 0 AndAlso .GetData(intRow, "isNode").ToString.Trim <> "1" Then
+                            Continue For
+                        End If
+                        btnSearch = New Button()
+                        If .Rows(intRow + 1).Visible Then
+                            btnSearch.Text = "-"
+                        Else
+                            btnSearch.Text = "+"
+                        End If
+                        btnSearch.Tag = .Cols(intCol).Name
+                        btnSearch.TabIndex = intRow
+                        btnSearch.Name = "btnSearchInGrid"
+                        AddHandler(btnSearch.Click), AddressOf objClass.ButtonSearchInGrid_Click
+                        '------------------------------------------------------
+                        returnValue.Add(New HostedControl(flexFlexGrid, btnSearch, intRow, intColumnIndex))
+                    Next
+                Else
+                    '20171010 FJN DAN-TN ADD END 
+                    For intRow As Integer = rowIndex To flexFlexGrid.Rows.Count - 1
+                        '20171010 FJN DAN-TN ADD START 
+                        If flexFlexGrid.Cols.IndexOf("isNode") > 0 AndAlso .GetData(intRow, "isNode").ToString.Trim <> "1" Then
+                            Continue For
+                        End If
+                        '20171010 FJN DAN-TN ADD END 
+                        btnSearch = New Button()
+                        btnSearch.Text = "▼"
+                        btnSearch.Tag = .Cols(intCol).Name
+                        btnSearch.TabIndex = intRow
+                        btnSearch.Name = "btnSearchInGrid"
+                        AddHandler(btnSearch.Click), AddressOf objClass.ButtonSearchInGrid_Click
+                        AddHandler(btnSearch.KeyDown), AddressOf objClass.ButtonSearchInGrid_KeyDown
+                        '------------------------------------------------------
+                        returnValue.Add(New HostedControl(flexFlexGrid, btnSearch, intRow, intColumnIndex))
+                    Next
+                End If   '20171010 FJN DAN-TN ADD 
+            Next
+        End With
+        '-------------------------------------------------
+        Return returnValue
+
+    End Function
+
+    'Public Sub FormatDate(ByVal flexFlexGrid As C1FlexGrid)    '20170303 FJN VAN-KV DEL 
+    Public Sub FormatDate(ByVal flexFlexGrid As C1FlexGrid, Optional ByVal obj As Object = Nothing)   '20170303 FJN VAN-KV ADD 
+        With flexFlexGrid
+            For intCol As Integer = 0 To flexFlexGrid.Cols.Count - 1
+                If RTrim(.Cols(intCol).Name) = "" Then
+                    Continue For
+                End If
+                If (IsNothing(.Cols(intCol).DataType) = False) Then
+                    If .Cols(intCol).DataType.ToString.Contains("DateTime") Then
+                        Dim myCalendar As New C1DateEdit
+                        myCalendar.CustomFormat = "yyyy/MM/dd"
+                        myCalendar.FormatType = FormatTypeEnum.ShortDate
+
+                        Dim def As DropDownControlButtonFlags
+                        def = DropDownControlButtonFlags.DropDown
+                        myCalendar.VisibleButtons = def
+                        myCalendar.EmptyAsNull = True   '20170206 FJN VAN-KV ADD
+                        AddHandler(myCalendar.KeyDown), AddressOf obj.FlexGrid_KeyDown              '20170303 FJN VAN-KV ADD 
+                        .Cols(intCol).Editor = myCalendar
+                    End If
+                End If
+            Next
+        End With
+    End Sub
+
+    ''' <summary>
+    ''' search index of column in C1FlexGrid
+    ''' </summary>
+    ''' <param name="flexFlexGrid"></param>
+    ''' <param name="strColumnName"></param>
+    ''' <returns>return index of column in C1FlexGrid</returns>
+    Public Function SearchColumnIndex(ByVal flexFlexGrid As C1FlexGrid, ByVal strColumnName As String) As Integer
+
+        Dim returnValue As Integer = -1
+        '---------------------------------------------------------------------
+        With flexFlexGrid
+            For i As Integer = 0 To .Cols.Count - 1
+                If String.Compare(.Cols(i).Name, strColumnName, True) = 0 Then
+                    returnValue = i
+                    Exit For
+                End If
+            Next
+        End With
+        '---------------------------------------------------------------------
+        Return returnValue
+
+    End Function
+
+    ''' <summary>
+    ''' Control Input Numberic
+    ''' </summary>
+    ''' <param name="gFlexGrid"></param>
+    ''' <param name="strColumnName"></param>
+    ''' <param name="decMaxValue"></param>
+    ''' <param name="decMinValue"></param>
+    ''' <param name="intDecimalPlaces"></param>
+    Public Sub ControlInputNumberic(ByRef gFlexGrid As C1FlexGrid,
+                                    ByVal strColumnName As String,
+                                    ByVal decMaxValue As Decimal,
+                                    ByVal decMinValue As Decimal,
+                                    ByVal intDecimalPlaces As Integer)
+
+        Dim objNumber As New NumbericInFlexGrid
+        objNumber.NegativeForeColor = Color.Red
+        objNumber.Name = "ctrC1NumericEdit"
+        objNumber.MaxValue = decMaxValue
+        objNumber.MinValue = decMinValue
+        objNumber.DecimalPlaces = intDecimalPlaces
+        objNumber.EmptyAsNull = True
+        objNumber.CaseSensitive = True
+        objNumber.DataType = GetType(System.Decimal)
+        'objNumber.CustomFormat = "###,###,###.##"
+        objNumber.FormatType = C1.Win.C1Input.FormatTypeEnum.CustomFormat
+        '--------------------------------------------------------------------
+        'objNumber.EditFormat.CustomFormat = "###,###,###.##"
+        objNumber.EditFormat.EmptyAsNull = True
+        objNumber.EditFormat.FormatType = C1.Win.C1Input.FormatTypeEnum.CustomFormat
+        'objNumber.DisplayFormat.CustomFormat = "###,###,###.##"
+        objNumber.DisplayFormat.EmptyAsNull = True
+        objNumber.EditFormat.FormatType = C1.Win.C1Input.FormatTypeEnum.CustomFormat
+        '--------------------------------------------------------------------
+        objNumber.MaskInfo.EmptyAsNull = True
+        objNumber.NullText = "0"
+        objNumber.ValueIsDbNull = True
+        objNumber.VisibleButtons = False
+        objNumber.Update()
+        '-----------------------------------------------------------------
+        Me.ImeMode = ImeMode.Disable
+        '-----------------------------------------------------------------
+        With gFlexGrid
+            Select Case gFlexGrid.Cols(gFlexGrid.ColSel).Name
+                Case strColumnName
+                    .Editor = Nothing
+                    If IsDBNull(gFlexGrid(gFlexGrid.RowSel, gFlexGrid.ColSel)) Then
+                        .Editor = objNumber
+                    Else
+                        objNumber.Value = 0
+                        .Editor = objNumber
+                    End If
+                Case Else
+                    Exit Sub
+            End Select
+            '-----------------------------------------------------------------
+            AddHandler .SetupEditor, AddressOf gFlexGrid_SetupEditor
+        End With
+
+    End Sub
+
+    ''' <summary>
+    ''' Control Input Text
+    ''' </summary>
+    Public Sub ControlInputText(ByRef gFlexGrid As C1FlexGrid,
+                                    ByVal strColumnName As String,
+                                    ByVal imeImeMode As ImeMode,
+                                    ByVal intMaxLength As Integer)
+
+        Dim objTextBox As New C1TextBox
+        objTextBox.Name = "strC1TextBox"
+        objTextBox.MaxLength = intMaxLength
+        Me.ImeMode = imeImeMode
+        '-----------------------------------------------------------------
+        With gFlexGrid
+            Select Case gFlexGrid.Cols(gFlexGrid.ColSel).Name
+                Case strColumnName
+                    .Editor = Nothing
+                    If IsDBNull(gFlexGrid(gFlexGrid.RowSel, gFlexGrid.ColSel)) Then
+                        .Editor = objTextBox
+                    Else
+                        objTextBox.Value = ""
+                        .Editor = objTextBox
+                    End If
+                Case Else
+                    Exit Sub
+            End Select
+            '-----------------------------------------------------------------
+            AddHandler .SetupEditor, AddressOf Me.gFlexGrid_SetupEditor
+        End With
+
+    End Sub
+
+    ''' <summary>
+    ''' Setup ImeMode for column input of C1FlexGrid
+    ''' </summary>
+    ''' <param name="sender"></param>
+    ''' <param name="e"></param>
+    Private Sub gFlexGrid_SetupEditor(sender As Object, e As RowColEventArgs)
+
+        Dim gC1FlexGrid As C1FlexGrid = DirectCast(sender, C1FlexGrid)
+        '-----------------------------------------------------
+        With gC1FlexGrid
+            If IsDBNull(.Cols(e.Col).Name) = True Then
+                Exit Sub
+            End If
+            '--------------------------------------------------
+            If RTrim(.Cols(e.Col).Name) = "" Then
+                Exit Sub
+            End If
+            '--------------------------------------------------
+            If RTrim(.Cols(e.Col).Name).Length <= 2 Then
+                Exit Sub
+            End If
+            '--------------------------------------------------
+            Select Case Mid(.Cols(e.Col).Name, 1, 2)
+                Case "n_"
+                    Dim numInFlexGrid = DirectCast(.Editor, NumbericInFlexGrid)
+                    '------------------------------------------
+                    If numInFlexGrid IsNot Nothing Then
+                        numInFlexGrid.ImeMode = ImeMode.Disable
+                    End If
+                Case "t_"
+                    Dim txtTextBox = DirectCast(.Editor, TextBox)
+                    '------------------------------------------
+                    If txtTextBox IsNot Nothing Then
+                        txtTextBox.ImeMode = Me.ImeMode
+                    End If
+                Case Else
+                    GoTo gFlexGrid_SetupEditor_END
+            End Select
+            '------------------------------------------
+gFlexGrid_SetupEditor_END:
+            RemoveHandler .SetupEditor, AddressOf Me.gFlexGrid_SetupEditor
+        End With
+
+    End Sub
+    ''' <summary>
+    ''' EnterKeyをコントロール
+    ''' </summary>
+    ''' <param name="sender"></param>
+    ''' <param name="e"></param>
+    Public Sub ControlEnterToTab(sender As Object, e As C1.Win.C1FlexGrid.RangeEventArgs)
+        For I As Integer = 0 To sender.Cols.Count - 1
+            If e.NewRange.ContainsCol(I) Then
+                If sender.Cols(I).AllowEditing = False Then
+                    SendKeys.Send("{Tab}")
+                End If
+            End If
+        Next
+    End Sub
+    '20170828 FJN DAN-TN ADD START 
+    ''' <summary>
+    ''' ShiftTabKeyをコントロール
+    ''' </summary>
+    ''' <param name="sender"></param>
+    ''' <param name="e"></param>
+    Public Sub ControlShiftToTab(sender As Object, e As C1.Win.C1FlexGrid.RangeEventArgs)
+        For I As Integer = 0 To sender.Cols.Count - 1
+            If e.NewRange.ContainsCol(I) Then
+                If sender.Cols(I).AllowEditing = False Then
+                    SendKeys.Send("+{Tab}")
+                End If
+            End If
+        Next
+    End Sub
+    '20170828 FJN DAN-TN ADD END 
+#Region "CheckLengthInput"
+    Public Sub CheckLengthInput(ByRef txtText As TextBox)
+
+        Dim enCoding As Encoding = Encoding.GetEncoding("Shift-JIS")
+        '-----------------------------------------------------------------------
+        If enCoding.GetByteCount(txtText.Text) > txtText.MaxLength Then
+            Dim strText As String = ""
+            Dim strTemp1 As String = ""
+            Dim strTemp2 As String = ""
+            Dim intByte1 As Integer = 0
+            Dim intByte2 As Integer = 0
+            Dim intIndexFocus1 As Integer = txtText.SelectionStart
+            Dim intIndexFocus2 As Integer = txtText.SelectionStart - 1
+            '-------------------------------------------------------------------
+            If (intIndexFocus1 < 0) OrElse (intIndexFocus2 < 0) Then
+                Exit Sub
+            End If
+            '-------------------------------------------------------------------
+            strTemp1 = txtText.Text.Substring(0, intIndexFocus1)
+            strTemp2 = txtText.Text.Substring(intIndexFocus1, txtText.Text.Length - strTemp1.Length)
+            '-------------------------------------------------------------------
+            intByte2 = txtText.MaxLength - enCoding.GetByteCount(strTemp2)
+            '-------------------------------------------------------------------
+            For i As Integer = strTemp1.Length To 0 Step -1
+                intByte1 = enCoding.GetByteCount(strTemp1.Substring(0, i))
+                '---------------------------------------------------------------
+                If intByte1 <= intByte2 Then
+                    strText = strTemp1.Substring(0, i)
+                    Exit For
+                End If
+            Next
+            '-------------------------------------------------------------------
+            strText = strText + strTemp2
+            '-------------------------------------------------------------------
+            If strText = "" Then
+                txtText.Select(intIndexFocus2, 0)
+                Exit Sub
+            End If
+            '-------------------------------------------------------------------
+            txtText.Text = strText
+            txtText.Select(intIndexFocus2, 0)
+        End If
+
+    End Sub
+#End Region
+
+End Class
+
+#Region "helper class that contains a control hosted within a C1FlexGrid"
+''' <summary>
+''' HostedControl
+''' helper class that contains a control hosted within a C1FlexGrid
+''' </summary>
+Public Class HostedControl
+
+    Friend flexFlexGrid As C1FlexGrid
+    Friend ctrControl As Control
+    Friend objRow As Row
+    Friend objColumn As Column
+    '--------------------------------------------------------------
+    ''' <summary>
+    ''' 
+    ''' </summary>
+    ''' <param name="flex"></param>
+    ''' <param name="hosted"></param>
+    ''' <param name="row"></param>
+    ''' <param name="col"></param>
+    ''' <remarks></remarks>
+    Public Sub New(ByVal flex As C1FlexGrid, ByVal hosted As Control, ByVal row As Integer, ByVal col As Integer)
+
+        ' save info
+        flexFlexGrid = flex
+        ctrControl = hosted
+        objRow = flex.Rows(row)
+        objColumn = flex.Cols(col)
+        ' insert hosted control into grid
+        flexFlexGrid.Controls.Add(ctrControl)
+
+    End Sub
+    ''' <summary>
+    ''' 
+    ''' </summary>
+    ''' <returns></returns>
+    ''' <remarks></remarks>
+    Public Function UpdatePosition() As Boolean
+
+        ' get row/col indices
+        Dim intRowIndex As Integer = objRow.Index
+        Dim intColumnIndex As Integer = objColumn.Index
+        '------------------------------------------------
+        If intRowIndex < 0 OrElse intColumnIndex < 0 Then
+            Return False
+        End If
+        If flexFlexGrid.Rows.Count = 1 Then
+            ctrControl.Visible = False
+            Return True
+        End If
+        '--------------------------
+        ' get cell rect
+        Dim rcRectangle As Rectangle = flexFlexGrid.GetCellRect(intRowIndex, intColumnIndex, False)
+        '--------------------------
+        ' hide control if out of range
+        If (rcRectangle.Width <= 0) OrElse (rcRectangle.Height <= 0) _
+            OrElse (Not rcRectangle.IntersectsWith(flexFlexGrid.ClientRectangle)) Then
+            ctrControl.Visible = False
+            Return True
+        End If
+        '--------------------------
+        ' move the control and show it
+        ctrControl.Bounds = rcRectangle
+        ctrControl.Visible = True
+        '--------------------------
+        ' done
+        Return True
+
+    End Function
+
+End Class
+#End Region
+
