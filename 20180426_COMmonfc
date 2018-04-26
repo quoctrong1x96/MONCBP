@@ -1,0 +1,420 @@
+#Region "Enter To Tab"
+    ''' <summary>
+    ''' EnterKeyをコントロール
+    ''' </summary>
+    ''' <param name="msg"></param>
+    ''' <param name="keyData"></param>
+    ''' <returns></returns>
+    Protected Overrides Function ProcessCmdKey(ByRef msg As System.Windows.Forms.Message,
+                                           ByVal keyData As System.Windows.Forms.Keys) _
+                                           As Boolean
+
+        If msg.WParam.ToInt32() = CInt(Keys.Enter) Then
+            If MyBase.ActiveControl.GetType <> GetType(C1.Win.C1Input.C1Button) Then
+                SendKeys.Send("{Tab}")
+                Return True
+            End If
+        End If
+        Return MyBase.ProcessCmdKey(msg, keyData)
+    End Function
+    ''' <summary>
+    ''' 処理名　 : イベント処理 - KeyPress
+    ''' </summary>
+    ''' <param name="e"></param>
+    Protected Overrides Sub OnKeyPress(ByVal e As System.Windows.Forms.KeyPressEventArgs)
+        'シングルクォーテーション入力無効
+        If e.KeyChar = "'" Then
+            e.Handled = True
+        End If
+        MyBase.OnKeyPress(e)
+    End Sub
+#End Region
+#Region "Private COMMON FUNCTIONS"
+    ''' <summary>
+    ''' 画面に項目をｸクリア
+    ''' </summary>
+    Private Sub DoCancel()
+        '---------------------
+        CB_SORT.SelectedIndex = 0
+        '------------------
+        G_円筒台帳明細.Controls.Clear()
+        If G_円筒台帳明細.DataSource IsNot Nothing Then
+            G_円筒台帳明細.DataSource.Clear()
+        End If
+        '--------------------------
+        If DBH IsNot Nothing Then
+            DBH.ReStart()
+        End If
+        arrList = New ArrayList() '20170829 FJN VAN-KV ADD
+        arrList2 = New ArrayList()  '20180413 FJN PHUOC-TT ADD
+    End Sub
+    Private Function Chk_Key() As Boolean
+        Try
+            '20180208 FJN DAN-TN DEL START 
+            'If N_版円周FROM.Value > N_版円周TO.Value Then
+            '    MsgBox(CYG_000XC.GET_MSG("E1078", "版円周"), MsgBoxStyle.Exclamation)
+            '    N_版円周FROM.Focus()
+            '    Return False
+            'End If
+            ''--------------------------------------
+            'If N_版面長FROM.Value > N_版面長TO.Value Then
+            '    MsgBox(CYG_000XC.GET_MSG("E1078", "版面長"), MsgBoxStyle.Exclamation)
+            '    N_版面長FROM.Focus()
+            '    Return False
+            'End If
+            '20180208 FJN DAN-TN DEL END 
+        Catch ex As Exception
+            MsgBox(ex.Message, MsgBoxStyle.Critical)
+            Return False
+        End Try
+        Return True
+    End Function
+    ''' <summary>
+    ''' データ保存する時、データの妥当性チェック
+    ''' </summary>
+    ''' <returns></returns>
+    Private Function Chk_All() As Boolean
+        
+                    '=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+                    Dim strT_保管場所C As String = ""
+                    '-----------------------------------------------------
+                    If Not IsDBNull(row("保管場所C")) AndAlso row("保管場所C").ToString.Trim <> "" Then
+                        strT_保管場所C = row("保管場所C").ToString.Trim
+                        If GET_M20M_名称("G6", strT_保管場所C) Then
+
+                        Else
+                            row("保管場所名") = ""
+                            MsgBox(rowCount & "行目の" & CYG_000XC.GET_MSG("E1111", "保管場所"), MsgBoxStyle.Exclamation)
+                            .Focus()
+                            .Select(rowCount, colT_保管場所C, False)
+                            '-------------
+                            .LeftCol = colT_保管場所C
+                            .TopRow = rowCount
+                            Return False
+                        End If
+                    Else
+                        row("保管場所名") = ""
+                    End If
+                    '=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+                    Dim strT_版区分C As String = ""
+                    '-----------------------------------------------------
+                    If Not IsDBNull(row("版区分C")) AndAlso row("版区分C").ToString.Trim <> "" Then
+                        strT_版区分C = row("版区分C").ToString.Trim
+                        'If GET_M20M_名称("LB", strT_版区分C) Then       '20171128 FJN DAN-TN DEL 
+                        If GET_M20M_名称("HK", strT_版区分C) Then        '20171128 FJN DAN-TN ADD 
+
+                        Else
+                            row("版区分名") = ""
+                            MsgBox(rowCount & "行目の" & CYG_000XC.GET_MSG("E1111", "版区分"), MsgBoxStyle.Exclamation)
+                            .Focus()
+                            .Select(rowCount, colT_版区分C, False)
+                            '-------------
+                            .LeftCol = colT_版区分C
+                            .TopRow = rowCount
+                            Return False
+                        End If
+                    Else
+                        row("版区分名") = ""
+                    End If
+                    '=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+                    Dim strT_製版種別C As String = ""
+                    '-----------------------------------------------------
+                    If Not IsDBNull(row("製版種別C")) AndAlso row("製版種別C").ToString.Trim <> "" Then
+                        strT_製版種別C = row("製版種別C").ToString.Trim
+                        'If GET_M20M_名称("P3", strT_製版種別C) Then      '20171128 FJN DAN-TN DEL 
+                        If GET_M20M_名称("P4", strT_製版種別C) Then       '20171128 FJN DAN-TN ADD 
+
+                        Else
+                            row("製版種別名") = ""
+                            MsgBox(rowCount & "行目の" & CYG_000XC.GET_MSG("E1111", "製版種別"), MsgBoxStyle.Exclamation)
+                            .Focus()
+                            .Select(rowCount, colT_製版種別C, False)
+                            '-------------
+                            .LeftCol = colT_製版種別C
+                            .TopRow = rowCount
+                            Return False
+                        End If
+                    Else
+                        row("製版種別名") = ""
+                    End If
+                    '=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+                    Dim strT_ランクC As String = ""
+                    '-----------------------------------------------------
+                    If Not IsDBNull(row("ランクC")) AndAlso row("ランクC").ToString.Trim <> "" Then
+                        strT_ランクC = row("ランクC").ToString.Trim
+                        If GET_M20M_名称("G4", strT_ランクC) Then
+
+                        Else
+                            row.Item("ランク名") = ""
+                            MsgBox(rowCount & "行目の" & CYG_000XC.GET_MSG("E1111", "ランク"), MsgBoxStyle.Exclamation)
+                            .Focus()
+                            .Select(rowCount, colT_ランクC, False)
+                            '-------------
+                            .LeftCol = colT_ランクC
+                            .TopRow = rowCount
+                            Return False
+                        End If
+                    Else
+                        row("ランク名") = ""
+                    End If
+                    '=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+                    Dim strT_資産区分C As String = ""
+                    '-----------------------------------------------------
+                    If Not IsDBNull(row("資産区分C")) AndAlso row("資産区分C").ToString.Trim <> "" Then
+                        strT_資産区分C = row("資産区分C").ToString.Trim
+                        If GET_M20M_名称("G5", strT_資産区分C) Then
+
+                        Else
+                            row("資産区分名") = ""
+                            MsgBox(rowCount & "行目の" & CYG_000XC.GET_MSG("E1111", "資産区分"), MsgBoxStyle.Exclamation)
+                            .Focus()
+                            .Select(rowCount, colT_資産区分C, False)
+                            '-------------
+                            .LeftCol = colT_資産区分C
+                            .TopRow = rowCount
+                            Return False
+                        End If
+                    Else
+                        row("資産区分名") = ""
+                    End If
+                    '=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+                    Dim strT_所有事業部C As String = ""
+                    '-----------------------------------------------------
+                    If Not IsDBNull(row("所有事業部C")) AndAlso row("所有事業部C").ToString.Trim <> "" Then
+                        strT_所有事業部C = row("所有事業部C").ToString.Trim
+                        If GET_M20M_名称("M9", strT_所有事業部C) Then
+
+                        Else
+                            row("所有事業部名") = ""
+                            MsgBox(rowCount & "行目の" & CYG_000XC.GET_MSG("E1111", "所有事業部"), MsgBoxStyle.Exclamation)
+                            .Focus()
+                            .Select(rowCount, colT_所有事業部C, False)
+                            '-------------
+                            .LeftCol = colT_所有事業部C
+                            .TopRow = rowCount
+                            Return False
+                        End If
+                    Else
+                        row("所有事業部名") = ""
+                    End If
+                Next
+                If countTotal = 0 Then
+                    MsgBox(CYG_000XC.GET_MSG("E1069"), MsgBoxStyle.Exclamation)
+                    Return False
+                End If
+            End With
+        Catch ex As Exception
+            MsgBox(ex.Message, MsgBoxStyle.Critical)
+            Set_Log("エラー内容 : " & ex.Message)
+            DBH.ReStart()
+            Return False
+        End Try
+        Return True
+    End Function
+    ''' <summary>
+    ''' 各項目をクリアする。
+    ''' </summary>
+    ''' <param name="obj"></param>
+    Private Sub ClearObject(ByVal obj As Control)
+        For Each ctlEach As Control In obj.Controls
+            Dim strCtrlName As String = ctlEach.Name.ToString
+            If strCtrlName.StartsWith("T_") Then
+                CType(ctlEach, C1.Win.C1Input.C1TextBox).Text = ""
+            End If
+            If strCtrlName.StartsWith("D_") Then
+                CType(ctlEach, C1.Win.C1Input.C1DateEdit).Value = vbNull
+            End If
+            If strCtrlName.StartsWith("N_") Then
+                CType(ctlEach, C1.Win.C1Input.C1NumericEdit).Value = 0
+            End If
+            If strCtrlName.StartsWith("C_") Then
+                CType(ctlEach, C1.Win.C1Input.C1CheckBox).Checked = False
+            End If
+            If strCtrlName.StartsWith("CB_") Then
+                CType(ctlEach, C1.Win.C1List.C1Combo).SelectedIndex = 0
+            End If
+            '20180208 FJN DAN-TN ADD START 
+            If strCtrlName.StartsWith("CCB_") Then
+                For i = 0 To CType(ctlEach, CheckedComboBox.CheckedComboBox).Items.Count - 1
+                    CType(ctlEach, CheckedComboBox.CheckedComboBox).SetItemChecked(i, False)
+                Next
+            End If
+            '20180208 FJN DAN-TN ADD END 
+        Next
+    End Sub
+    ''' <summary>
+    ''' 項目を有効・無効する。
+    ''' </summary>
+    ''' <param name="obj"></param>
+    ''' <param name="flag"></param>
+    Private Sub EnableObject(ByVal obj As Control, ByVal flag As Boolean)
+        For Each ctlEach As Control In obj.Controls
+            Dim strCtrlName As String = ctlEach.Name.ToString
+            If strCtrlName.StartsWith("T_") Then
+                If CType(ctlEach, C1.Win.C1Input.C1TextBox).BackColor = Color.FromArgb(255, 255, 192) Then
+                    CType(ctlEach, C1.Win.C1Input.C1TextBox).Enabled = False
+                Else
+                    CType(ctlEach, C1.Win.C1Input.C1TextBox).Enabled = flag
+                End If
+            End If
+            If strCtrlName.StartsWith("D_") Then
+                If CType(ctlEach, C1.Win.C1Input.C1DateEdit).BackColor = Color.FromArgb(255, 255, 192) Then
+                    CType(ctlEach, C1.Win.C1Input.C1DateEdit).Enabled = False
+                Else
+                    CType(ctlEach, C1.Win.C1Input.C1DateEdit).Enabled = flag
+                End If
+            End If
+            If strCtrlName.StartsWith("N_") Then
+                If CType(ctlEach, C1.Win.C1Input.C1NumericEdit).BackColor = Color.FromArgb(255, 255, 192) Then
+                    CType(ctlEach, C1.Win.C1Input.C1NumericEdit).Enabled = False
+                Else
+                    CType(ctlEach, C1.Win.C1Input.C1NumericEdit).Enabled = flag
+                End If
+            End If
+            If strCtrlName.StartsWith("C_") Then
+                CType(ctlEach, C1.Win.C1Input.C1CheckBox).Enabled = flag
+            End If
+            If strCtrlName.StartsWith("B_") Then
+                CType(ctlEach, C1.Win.C1Input.C1Button).Enabled = flag
+            End If
+        Next
+    End Sub
+    ''' <summary>
+    ''' DATA部を設定
+    ''' </summary>
+    Private Sub SetBody()
+        '---------------
+        Call EnableObject(P_KEY, False)
+        '---------------
+        Select Case 処理区分
+            Case "1"
+                Call EnableObject(P_DATA, True)
+                '---------------------
+                B_OK.Enabled = True
+                T_受注No.Focus()
+            Case "2"
+                Call EnableObject(P_DATA, True)
+                '---------------------
+                B_OK.Enabled = True
+                T_受注No.Focus()
+            Case "3"
+                Call EnableObject(P_DATA, False)
+                '---------------------
+                B_OK.Enabled = True
+                B_OK.Focus()
+            Case "4"
+                Call EnableObject(P_DATA, False)
+                '---------------------
+                B_OK.Enabled = False
+                B_CANCEL.Focus()
+        End Select
+        B_CANCEL.Enabled = True
+    End Sub
+    ''' <summary>
+    ''' テクストをフォマートする
+    ''' </summary>
+    ''' <param name="strNumberToFormat"></param>
+    ''' <param name="strFormatStyle"></param>
+    ''' <param name="strOutResult"></param>
+    ''' <param name="strFlag"></param>
+    Public Sub FormatNumber(ByVal strNumberToFormat As String, ByVal strFormatStyle As String, ByRef strOutResult As String, Optional ByVal strFlag As String = "")
+        Dim numCursor As Integer = 0 '"-"の位置
+        Dim strNumber As String = strNumberToFormat.Replace("-", "")
+        Dim strStyle As String = strFormatStyle.Replace("-", "")
+        strOutResult = strNumber
+        '長さのチェック
+        If strNumber.Length > strStyle.Length Then
+            'エラーが発生する場合、空のデータを戻る
+            Exit Sub
+        End If
+        Dim I As Integer
+        If strFlag <> "" Then
+            If strNumber.Length < strStyle.Length Then
+                For I = 0 To strStyle.Length - strNumber.Length - 1
+                    strNumber = strNumber & strFlag
+                Next
+                strOutResult = strNumber
+            End If
+        End If
+        '書式の分解
+        Dim arrStyle As String() = strFormatStyle.Split("-")
+        Dim J As Integer
+        '結果の作成
+        For J = 0 To arrStyle.Length - 2
+            numCursor += arrStyle(J).Length + J
+            If numCursor < strOutResult.Length Then
+                strOutResult = strOutResult.Insert(numCursor, "-")
+                numCursor = numCursor - J
+            End If
+        Next
+        If strNumberToFormat.EndsWith("-") And strFlag = "" Then
+            strOutResult = strOutResult & "-"
+        End If
+    End Sub
+    ''' <summary>
+    ''' テクストをフォマートする
+    ''' </summary>
+    ''' <param name="Q_Number_To_Format"></param>
+    ''' <param name="Q_Format_Style"></param>
+    ''' <param name="A_Result"></param>
+    ''' <param name="Q_Flag"></param>
+    Public Sub Format_Number_2(ByVal Q_Number_To_Format As String, ByVal Q_Format_Style As String, ByRef A_Result As String, Optional ByVal Q_Flag As String = "")
+        Dim Cursor As Integer = 0
+        Dim Number As String = Q_Number_To_Format.Replace("-", "")
+        Dim Style As String = Q_Format_Style.Replace("-", "")
+        A_Result = Number
+        '----------------------------------------------------------------------------
+        If Number.Length > Style.Length Then
+            Exit Sub
+        End If
+        Dim I As Integer
+        If Q_Flag <> "" Then
+            If Number.Length < Style.Length Then
+                For I = 0 To Style.Length - Number.Length - 1
+                    Number = Number & Q_Flag
+                Next
+                A_Result = Number
+            End If
+        End If
+        '----------------------------------------------------------------------------
+        Dim Style_Arr As String() = Q_Format_Style.Split("-")
+        Dim J As Integer
+        '----------------------------------------------------------------------------
+        For J = 0 To Style_Arr.Length - 2
+            Cursor += Style_Arr(J).Length + J
+            If Cursor < A_Result.Length Then
+                A_Result = A_Result.Insert(Cursor, "-")
+                Cursor = Cursor - J
+            End If
+        Next
+        If Q_Number_To_Format.EndsWith("-") And Q_Flag = "" Then
+            A_Result = A_Result & "-"
+        End If
+    End Sub
+    ''' <summary>
+    ''' SYSDATEを取得
+    ''' </summary>
+    ''' <returns></returns>
+    Private Function SYSDATE() As String
+        SYSDATE = String.Format("{0:yyyy/MM/dd}", Today)
+    End Function
+    ''' <summary>
+    ''' 項目の本名を取得
+    ''' </summary>
+    ''' <param name="sender"></param>
+    ''' <returns></returns>
+    Private Function getRealName(ByVal sender As Object)
+        getRealName = sender.Name
+        Try
+            getRealName = sender.Name.ToString.Replace("T_", "").Replace("D_", "").Replace("N_", "").Replace("CB_", "")
+        Catch ex As Exception
+        End Try
+    End Function
+    Private Sub SQL_RTN()
+        strWhere.Clear()
+        strWhere.Append(" 1 = 1 ")
+        '----------------------------------
+        If T_版_仕様書NO.Text.Trim <> "" Then
+            strWhere.AppendFormat(" AND 版_仕様書NO = '{0}' ", T_版_仕様書NO.Text.Trim)
+        End If
+      end sub
