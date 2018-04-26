@@ -1,0 +1,280 @@
+Imports C1.Win.C1FlexGrid
+Imports System.Data.OracleClient
+Imports System.IO
+Imports System.Text
+Imports C1.Win.C1List  '20180413 FJN PHUOC-TT ADD
+Public Class G40_200EF
+#Region "アップグレード ウィザードのサポート コード"
+    Private Shared m_vb6FormDefInstance As G40_200EF
+    Private Shared m_InitializingDefInstance As Boolean
+    Private Shared m_FirstActive As Boolean '1度だけ処理
+
+    Public Shared Property DefInstance() As G40_200EF
+        Get
+            If m_vb6FormDefInstance Is Nothing OrElse m_vb6FormDefInstance.IsDisposed Then
+                m_InitializingDefInstance = True
+                m_vb6FormDefInstance = New G40_200EF
+                m_InitializingDefInstance = False
+                m_FirstActive = False   '1度だけ処理
+            End If
+            DefInstance = m_vb6FormDefInstance
+        End Get
+        Set(ByVal Value As G40_200EF)
+            m_vb6FormDefInstance = Value
+        End Set
+    End Property
+    Shared Sub Main()
+        Application.EnableVisualStyles()
+        Application.DoEvents()
+        Application.Run(New G40_200EF())
+    End Sub
+#End Region
+PAINT BUTTON IN GRID
+    Dim arrList As New ArrayList()
+    Dim arrList2 As New ArrayList()           '20180413 FJN PHUOC-TT ADD
+    Dim flxCommon As New FlexGridCommon
+    '************************************************
+    '   インスタンス宣言（ＤＬＬ）
+    '************************************************
+    Dim DBH As DBHelper.DBHelper
+    '----------------------------------------------------------------------------
+    Dim C00_001XC As DFW_C00_001X.C00_001XC
+    Dim C00_200XC As DFW_C00_200X.C00_200XC
+    Dim C00_100EA As DFW_C00_100E.C00_100EC
+    Dim CYG_000XC As CYG_C00_000X.CYG_C00_000XC
+    Dim M30_010SC As CYG_M30_010S.M30_010SC
+    Dim J10_010SC As CYG_J10_010S.J10_010SC
+    Dim L10_030SC As CYG_L10_030S.L10_030SC
+    Dim M50_010SC As CYG_M50_010S.M50_010SC     '20180413 FJN PHUOC-TT ADD 
+    '************************************************
+    '   変数宣言(SQL文)
+    '************************************************
+    Dim conStr As String = ""
+    Dim strSql As New StringBuilder
+    Dim strWhere As New StringBuilder
+    Dim Sql_Code As Integer
+    '************************************************
+    '   変数宣言
+    '************************************************
+    '----------------------------------------------------------------------------
+    Dim Format_受注 As String = "YY-MM-9999"
+    Dim Format_版NO As String = "YY-9999"
+    Dim flagDelete As Boolean = False
+    '----------------------------
+    Dim colorWhite As C1.Win.C1FlexGrid.CellStyle
+    Dim colorInfo As C1.Win.C1FlexGrid.CellStyle
+    '----------------------------
+    Dim dtG40F As DataTable
+    Public getLog As Microsoft.VisualBasic.Logging.Log
+    Public TempFileName As String = System.Reflection.Assembly.GetExecutingAssembly.GetCustomAttributes(GetType(System.Reflection.AssemblyTitleAttribute), True).GetValue(0).title & ".temp"
+    Public LogMaxFileSize As Integer = 8000000
+    Public LogCustomLocation As String = IO.Directory.GetParent(System.IO.Directory.GetCurrentDirectory()).FullName & "\Log"
+    Public LogFileName As String = System.Reflection.Assembly.GetExecutingAssembly.GetCustomAttributes(GetType(System.Reflection.AssemblyTitleAttribute), True).GetValue(0).title
+    'Dim list棚番 As New Dictionary(Of Object, Object)()  '20180413 FJN PHUOC-TT ADD  '20180423 FJN PHUOC-TT DEL
+    Dim dtM20M As DataTable  '20180423 FJN PHUOC-TT ADD
+    Dim flagSetCombo棚番 As Boolean = False              '20180413 FJN PHUOC-TT ADD
+
+#Region "Form event"
+  ''' <summary>
+    ''' 画面を初期する。
+    ''' </summary>
+    ''' <param name="sender"></param>
+    ''' <param name="e"></param>
+    Private Sub G40_200E_Load(sender As Object, e As EventArgs) Handles MyBase.Load
+        Me.Text = Me.Text & "   R." & System.Diagnostics.FileVersionInfo.GetVersionInfo(System.Reflection.Assembly.GetExecutingAssembly.Location).FileMajorPart & "." & System.Diagnostics.FileVersionInfo.GetVersionInfo(System.Reflection.Assembly.GetExecutingAssembly.Location).FileMinorPart & "." & System.Diagnostics.FileVersionInfo.GetVersionInfo(System.Reflection.Assembly.GetExecutingAssembly.Location).FileBuildPart
+        '----------------------------------------------------------------------------
+        Cursor.Current = Cursors.WaitCursor
+        '----------------------------------------------------------------------------
+        Call Crt_Object("INI")
+        '----------------------------------------------------------------------------
+        ' サービス／ユーザー／パスワード取得
+        Call C00_000XA_Result()
+        '----------------------------------------------------------------------------
+        Result = C00_001XC.Init(IniDrive, IniFile, Computer_Name, Save_Serv, Save_User, Save_Pass, OraSession, OraDatabase, SW_Err)
+        If SW_Err = "1" Then
+            Cursor.Current = Cursors.Default
+            Me.Close()
+            Exit Sub
+        End If
+        '----------------------------------------------------------------------------
+        Work_Computer = Computer_Name
+        Work_Program = IO.Path.GetFileNameWithoutExtension(System.Reflection.Assembly.GetExecutingAssembly.Location)
+        Call_Program = IO.Path.GetFileNameWithoutExtension(Application.ExecutablePath)
+        '-----------------------------------------------------------------------------
+        Call GEQ_C40C()
+        If (SW_Err = "1") Then
+            Me.Close()
+            Exit Sub
+        End If
+        '-------------------------------------------------------------------------
+        Call CLR_C40C()
+        '-------------------------------------------------------------------------
+        Call UPD_C40C()
+        If SW_Err <> "" Then
+            MsgBox(CYG_000XC.GET_MSG("E0003", SW_Err), MsgBoxStyle.Exclamation)
+            Me.Close()
+            Exit Sub
+        End If
+        '-----------------------------------------------------------------------------
+        '初期処理はここで追加
+        conStr = "User Id=" & Save_User & ";" _
+               & "Password=" & Save_Pass & ";" _
+               & "Data Source=" & Save_Serv & ";"
+        'ODPコネクション。検索画面を使用する場合に必要
+        ODPConnection = New OracleConnection(conStr)
+        '----------------------------------------------------------------------------
+        DBH = New DBHelper.DBHelper(conStr, Save_Ope, Work_Program)
+        DBH.Start()
+        '----------------------------------------------------------------------------  
+        'Gridの版NO列名を設定する
+        G_円筒台帳明細.Rows.Fixed = 1
+        G_円筒台帳明細.AllowMerging = C1.Win.C1FlexGrid.AllowMergingEnum.FixedOnly
+        G_円筒台帳明細.Rows(0).AllowMerging = True
+        '-----------------------
+        Dim colT_版_仕様書NO As Integer = flxCommon.SearchColumnIndex(G_円筒台帳明細, "版_仕様書NO")
+        Dim colT_版_枝番 As Integer = flxCommon.SearchColumnIndex(G_円筒台帳明細, "版_枝番")
+        Dim rng As C1.Win.C1FlexGrid.CellRange = G_円筒台帳明細.GetCellRange(0, colT_版_仕様書NO, 0, colT_版_枝番)
+        rng.Data = "版NO"
+        G_円筒台帳明細.Styles.Fixed.TextAlign = C1.Win.C1FlexGrid.TextAlignEnum.CenterCenter
+        '-----------------------
+        Call Get_CB版区分()
+        Call Get_CB製版種別()
+        Call Set_版円周()     '20180208 FJN DAN-TN ADD 
+        Call Set_版面長()     '20180208 FJN DAN-TN ADD
+        Call Set_棚番()          '20180413 FJN PHUOC-TT ADD
+        Call Combo棚番_Paint()   '20180413 FJN PHUOC-TT ADD
+        Call ClearObject(P_KEY)
+        Call DoCancel()
+        '----------------------------------------------------------------------------
+        strWhere.Clear()
+        strWhere.Append(" 1 = 2 ")
+        Call GetG40F(dtG40F)
+        G_円筒台帳明細.DataSource = dtG40F
+        '--------------------
+        G_円筒台帳明細.Focus()
+        G_円筒台帳明細.Select(0, 0, False)
+        flxCommon.FormatDate(G_円筒台帳明細, Me)
+        '----------------------------------------------------------------------------              
+        Cursor.Current = Cursors.Default
+    End Sub
+    Private Sub G40_200EF_Activated(sender As Object, e As EventArgs) Handles MyBase.Activated
+        '------------------------------------------------
+        '1度だけ処理
+        If m_FirstActive Then
+            Cursor.Current = Cursors.Default
+            Exit Sub
+        Else
+            m_FirstActive = True
+        End If
+        パス区分 = "3"
+        タイトル = "円筒台帳入力（一括）"
+        処理区分 = ""
+        オペレータ = ""
+        Result = C00_100EA.Init(OraDatabase, Save_Serv, Save_User, Save_Pass, タイトル, 処理区分, オペレータ, パス区分, 日付既定値, ODPConnection, Work_Program)
+        '--------------------------------------------       
+        Call UPD_C20C("0", 0, 0, " ")
+        '--------------------------------------------
+        If 処理区分 = "9" Then
+            Cursor.Current = Cursors.Default
+            Me.Close()
+            Exit Sub
+        End If
+        Cursor.Current = Cursors.Default
+        '-------------------------------------------   
+        'ﾌｫｰﾑ最小ｻｲｽﾞの設定		    
+        Call Set_FormMinSize(Me)
+    End Sub
+    ''' <summary>
+    ''' 画面を完了する。
+    ''' </summary>
+    ''' <param name="sender"></param>
+    ''' <param name="e"></param>
+    Private Sub H10_100EF_FormClosed(sender As Object, e As FormClosedEventArgs) Handles MyBase.FormClosed
+        Try
+            Call Crt_Object("END")
+            If Not DBH Is Nothing Then
+                DBH.ReStart()                                '20170829 FJN VAN-KV ADD
+                Call UPD_C20C("9", CStr(0), CStr(0), " ")    '20170829 FJN VAN-KV ADD
+                DBH.Dispose()
+            End If
+            '20170829 FJN VAN-KV ADD START
+            If ODPConnection IsNot Nothing Then
+                ODPConnection.Close()
+                ODPConnection.Dispose()
+            End If
+            '20170829 FJN VAN-KV ADD END
+        Catch ex As Exception
+            MsgBox(ex.Message)
+        End Try
+    End Sub
+    ''' <summary>
+    ''' 各参照を宣言する。
+    ''' </summary>
+    ''' <param name="Q_Mode"></param>
+    Private Sub Crt_Object(ByVal Q_Mode As String)
+        Select Case Q_Mode
+            Case "INI"
+                C00_001XC = New DFW_C00_001X.C00_001XC
+                C00_200XC = New DFW_C00_200X.C00_200XC
+                C00_100EA = New DFW_C00_100E.C00_100EC
+                CYG_000XC = New CYG_C00_000X.CYG_C00_000XC
+                M30_010SC = New CYG_M30_010S.M30_010SC
+                J10_010SC = New CYG_J10_010S.J10_010SC
+                L10_030SC = New CYG_L10_030S.L10_030SC
+                M50_010SC = New CYG_M50_010S.M50_010SC  '20180413 FJN PHUOC-TT ADD
+                '-------------------------------------------------
+                colorWhite = G_円筒台帳明細.Styles.Add("WHITE")
+                colorWhite.BackColor = Drawing.Color.White
+                colorInfo = G_円筒台帳明細.Styles.Add("INFO")
+                colorInfo.BackColor = Drawing.Color.FromArgb(255, 255, 255, 192)
+                '-------------------------------------------------
+                Ini_Log()
+                Set_Log("*********************************")
+                Set_Log("画面起動 : " & System.DateTime.Now)
+            Case "END"
+                C00_001XC = Nothing
+                C00_200XC = Nothing
+                C00_100EA = Nothing
+                CYG_000XC = Nothing
+                M30_010SC = Nothing
+                J10_010SC = Nothing
+                L10_030SC = Nothing
+                M50_010SC = Nothing  '20180413 FJN PHUOC-TT ADD
+                '-------------------------------------------------
+                Set_Log("画面閉 : " & System.DateTime.Now)
+                Set_Log("*********************************")
+                End_Log()
+            Case Else
+                '======================================== エラー処理
+
+                MsgBox("処理モードの指定が間違っています。" & Chr(10) & " Crt_Object の処理モードは [ INI ] or [ END ] です。", MsgBoxStyle.Exclamation)
+        End Select
+    End Sub
+    ''' <summary>
+    ''' 
+    ''' </summary>
+    ''' <param name="sender"></param>
+    ''' <param name="e"></param>
+    Private Sub H10_100EF_KeyDown(sender As Object, e As KeyEventArgs) Handles MyBase.KeyDown
+        Dim KeyCode As Short = e.KeyCode
+        Dim Shift As Short = e.KeyCode \ &H10000
+        Select Case KeyCode
+            Case Keys.F1 ' ｆ・１　　終了（キャンセル）処理
+                e.Handled = True
+                B_終了.PerformClick()
+            Case Keys.F2 ' ｆ・２　　戻る処理
+                e.Handled = True
+                B_CANCEL.PerformClick()
+            Case Keys.F4 ' ｆ・４   
+                e.Handled = True
+                B_ｸﾘｱ.PerformClick()
+            Case Keys.F5 ' ｆ・５   
+                e.Handled = True
+                B_検索.PerformClick()
+            Case Keys.F10 ' ｆ・10      ＢＯＤＹ部 ＯＫ
+                e.Handled = True
+                B_OK.PerformClick()
+
+        End Select
+    End Sub
+#End Region
