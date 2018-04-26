@@ -1,0 +1,75 @@
+#Region "Log"
+    Public Sub Ini_Log()
+        getLog = My.Application.Log
+        getLog.DefaultFileLogWriter.DiskSpaceExhaustedBehavior = Logging.DiskSpaceExhaustedOption.ThrowException
+        getLog.DefaultFileLogWriter.MaxFileSize = LogMaxFileSize
+        getLog.DefaultFileLogWriter.CustomLocation = LogCustomLocation
+        getLog.DefaultFileLogWriter.BaseFileName = LogFileName
+        getLog.DefaultFileLogWriter.AutoFlush = True
+        Try
+            getLog.DefaultFileLogWriter.WriteLine("[" & DateTime.Now & "] START")
+            getLog.DefaultFileLogWriter.Close()
+        Catch ex As Exception
+            getLog.DefaultFileLogWriter.Dispose()
+            File.Delete(LogFileName)
+        End Try
+    End Sub
+    Public Sub Set_Log(ByVal Log As String)
+        Try
+            getLog.DefaultFileLogWriter.Write(Log)
+            getLog.DefaultFileLogWriter.WriteLine("")
+            getLog.DefaultFileLogWriter.Close()
+        Catch ex As Exception
+            getLog.DefaultFileLogWriter.Dispose()
+            File.Delete(LogFileName)
+        End Try
+    End Sub
+    Public Sub End_Log()
+        If getLog Is Nothing Then
+            Exit Sub
+        End If
+        Try
+            getLog.DefaultFileLogWriter.WriteLine("[" & DateTime.Now & "] END ")
+            getLog.DefaultFileLogWriter.Close()
+            getLog.DefaultFileLogWriter.Dispose()
+        Catch ex As Exception
+            getLog.DefaultFileLogWriter.Dispose()
+            File.Delete(LogFileName)
+        End Try
+    End Sub
+
+    '20180228 FJN DAN-TN DEL START
+    ''20180228 FJN DAN-TN ADD START
+    'Private Sub CCB_版円周_DropDownClosed(sender As Object, e As EventArgs) Handles CCB_版円周.DropDownClosed
+    '    If CCB_版円周.Text <> CCB_版円周.Tag
+    '        SendKeys.Send("{TAB}")
+    '    End If        
+    'End Sub
+
+    'Private Sub CCB_版円周_Leave(sender As Object, e As EventArgs) Handles CCB_版円周.Leave
+    '    CCB_版円周.Tag = CCB_版円周.Text
+    'End Sub
+
+    'Private Sub CCB_版面長_Leave(sender As Object, e As EventArgs) Handles CCB_版面長.Leave
+    '    CCB_版面長.Tag = CCB_版面長.Text
+    'End Sub
+
+    'Private Sub CCB_版面長_DropDownClosed(sender As Object, e As EventArgs) Handles CCB_版面長.DropDownClosed
+    '    If CCB_版面長.Text <> CCB_版面長.Tag
+    '        SendKeys.Send("{TAB}")
+    '    End If 
+    'End Sub
+
+    'Private Sub CCB_版円周_MouseDown(sender As Object, e As MouseEventArgs) Handles CCB_版円周.MouseDown
+    '    CCB_版円周.DroppedDown = False
+    'End Sub
+
+    'Private Sub CCB_版面長_MouseDown(sender As Object, e As MouseEventArgs) Handles CCB_版面長.MouseDown
+    '    CCB_版面長.DroppedDown = False
+    'End Sub
+
+    ''20180228 FJN DAN-TN ADD END
+    '20180228 FJN DAN-TN DEL END
+#End Region
+
+End Class
