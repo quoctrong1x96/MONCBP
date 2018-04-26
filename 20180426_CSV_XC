@@ -1,0 +1,219 @@
+Option Strict Off
+Option Explicit On 
+Public Class C00_600XC
+    '*******************************************************************************
+    ' System :  Factory-ONE 電脳工場
+    ' Title  :  CSV出力モジュール
+    ' Version:  R 2.0.0
+    '-------------------------------------------------------------------------------
+    ' 新  規 : 08/04/14 ENG Okada       新規開発
+    ' 改  造 : @@8001   EX  KAJI        R2.0へのバージョンアップに伴う変更
+    ' 変　更 : 20170811 FJN VAN-KV      DataTable用の新しいファンクションを追加する。
+    ' 変　更 : 20170831 ECT YUANCHAO    事業部別追加要望PJ管理台帳1067
+    '*******************************************************************************
+
+    '--------------------------------------------
+    ' ＣＳＶ規定値の構造体
+    '--------------------------------------------
+    Public Structure CSV_Param
+        Dim strHeaderTitleFlag As String        ' 項目タイトルF
+        Dim strRTrimFlag As String              ' 文字右余白削除F
+        Dim strCheckOverWriteFlag As String     ' 上書保存確認F
+        Dim strSepareteLetter As String         ' セパレータ文字
+        Dim strEnclosureSign As String          ' 文字列区切記号
+    End Structure
+
+    Public Function Init(ByVal Q_Work_Computer As String,
+                          ByVal Q_Work_Program As String,
+                          ByVal Q_ReportNo As Integer,
+                          ByVal Q_FileTitle As String,
+                          ByVal Q_SQL As String,
+                          ByRef A_ErrCod As Integer,
+                          ByRef A_ErrTxt As String,
+                          ByVal Q_CSV As CSV_Param
+                    ) As Object
+        '************************************************** 起動関数(構造体使用)
+        Work_Computer = Q_Work_Computer
+        Work_Program = Q_Work_Program
+        Init = Nothing              '@@8001 EX KAJI ADD
+        '-------------------------------------
+        Call CreateCSV(Q_ReportNo, Q_FileTitle, Q_SQL, Q_CSV)
+        '-------------------------------------
+        A_ErrCod = WG_ErrCod
+        A_ErrTxt = WG_ErrTxt
+    End Function
+    '20170811 FJN VAN-KV ADD START
+    Public Function Init2(ByVal Q_Work_Computer As String,
+                          ByVal Q_Work_Program As String,
+                          ByVal Q_ReportNo As Integer,
+                          ByVal Q_FileTitle As String,
+                          ByVal Q_DataTable As DataTable,
+                          ByRef A_ErrCod As Integer,
+                          ByRef A_ErrTxt As String,
+                          ByVal Q_Header As String,
+                          ByVal Q_RTrim As String,
+                          ByVal Q_OverWrite As String,
+                          ByVal Q_Separete As String,
+                          ByVal Q_Sign As String,
+                          ByVal Q_CsvLastName As Boolean
+                    ) As Object
+        '************************************************** 起動関数(構造体使用)
+        Work_Computer = Q_Work_Computer
+        Work_Program = Q_Work_Program
+        Init2 = Nothing
+        '-------------------------------------
+        Dim Ww_CSV As CSV_Param
+        Ww_CSV = CSVParamSet(Q_Header, Q_RTrim, Q_OverWrite, Q_Separete, Q_Sign)
+        Call CreateCSV_2(Q_ReportNo, Q_FileTitle, Q_DataTable, Ww_CSV)
+        '-------------------------------------
+        A_ErrCod = WG_ErrCod
+        A_ErrTxt = WG_ErrTxt
+    End Function
+    '20170811 FJN VAN-KV ADD END
+
+    '20120703 MODIFIED BY XIAOHY
+    'Public Function Init(ByVal Q_Work_Computer As String, _
+    '                  ByVal Q_Work_Program As String, _
+    '                  ByVal Q_ReportNo As Integer, _
+    '                  ByVal Q_FileTitle As String, _
+    '                  ByVal Q_SQL As String, _
+    '                  ByRef A_ErrCod As Integer, _
+    '                  ByRef A_ErrTxt As String, _
+    '                  ByVal Q_Header As String, _
+    '                  ByVal Q_RTrim As String, _
+    '                  ByVal Q_OverWrite As String, _
+    '                  ByVal Q_Separete As String, _
+    '                  ByVal Q_Sign As String, _
+    '                  ByVal Q_CsvLastName As Boolean
+    '            ) As Object
+    Public Function Init(ByVal Q_Work_Computer As String, _
+                     ByVal Q_Work_Program As String, _
+                     ByVal Q_ReportNo As Integer, _
+                     ByVal Q_FileTitle As String, _
+                     ByVal Q_SQL As String, _
+                     ByRef A_ErrCod As Integer, _
+                     ByRef A_ErrTxt As String, _
+                     ByVal Q_Header As String, _
+                     ByVal Q_RTrim As String, _
+                     ByVal Q_OverWrite As String, _
+                     ByVal Q_Separete As String, _
+                     ByVal Q_Sign As String, _
+                     ByVal Q_CsvLastName As Boolean, _
+                     Optional ByRef Q_SelectItem As String = " "
+               ) As Object
+        '************************************************** 起動関数
+        Work_Computer = Q_Work_Computer
+        Work_Program = Q_Work_Program
+        Init = Nothing              '@@8001 EX KAJI ADD
+
+        Dim Ww_CSV As CSV_Param
+        Ww_CSV = CSVParamSet(Q_Header, Q_RTrim, Q_OverWrite, Q_Separete, Q_Sign)
+        W_SelectItem = Q_SelectItem  '20120703 ADDED BY XIAOHY
+        '-------------------------------------
+        Call CreateCSV(Q_ReportNo, Q_FileTitle, Q_SQL, Ww_CSV, Q_CsvLastName)
+        '-------------------------------------
+        A_ErrCod = WG_ErrCod
+        A_ErrTxt = WG_ErrTxt
+    End Function
+    '20170831 ADDED BY YUANCHAO START 
+    Public Function Init3(ByVal Q_Work_Computer As String,
+                     ByVal Q_Work_Program As String,
+                     ByVal Q_ReportNo As Integer,
+                     ByVal Q_FileTitle As String,
+                     ByVal Q_SQL As String,
+                     ByRef A_ErrCod As Integer,
+                     ByRef A_ErrTxt As String,
+                     ByVal Q_Header As String,
+                     ByVal Q_RTrim As String,
+                     ByVal Q_OverWrite As String,
+                     ByVal Q_Separete As String,
+                     ByVal Q_Sign As String,
+                     ByVal Q_CsvLastName As Boolean,
+                     ByVal Q_FilePath As String,
+                     Optional ByRef Q_SelectItem As String = " "
+        ) As Object
+        '************************************************** 起動関数(構造体使用)
+        Work_Computer = Q_Work_Computer
+        Work_Program = Q_Work_Program
+        Init3 = Nothing
+
+        Dim Ww_CSV As CSV_Param
+        Ww_CSV = CSVParamSet(Q_Header, Q_RTrim, Q_OverWrite, Q_Separete, Q_Sign)
+        W_SelectItem = Q_SelectItem
+        '-------------------------------------
+        Call CreateCSV_3(Q_ReportNo, Q_FileTitle, Q_SQL, Q_FilePath, Ww_CSV, Q_CsvLastName)
+        '-------------------------------------
+        A_ErrCod = WG_ErrCod
+        A_ErrTxt = WG_ErrTxt
+    End Function
+    '20170831 ADDED BY YUANCHAO END
+    Public Function CSVParamSet(ByVal Dynaset As Object) As CSV_Param
+        '************************************************** CSV規定値を Dynasetより作成
+        Dim i As Integer
+        Dim Index As Integer
+        Dim Value As Object
+        Dim Ww_ItemName() As String = {"CSV項目タイトルF", _
+                                        "CSV文字右余白削除F", _
+                                        "CSV上書保存確認F", _
+                                        "CSVセパレータ文字", _
+                                        "CSV文字列区切り記号" _
+                                      }
+        '---------------------------------------- Default値
+        Dim Ww_Param As CSV_Param = CSVParamSet(" ", " ", " ", " ", "")
+
+        '---------------------------------------- Dynasetより抽出
+        With Dynaset
+            If .RecordCount > 0 Then
+                For i = 0 To (.Fields.Count - 1)
+                    'Index = Ww_ItemName.IndexOf(Ww_ItemName, .Fields(i).Name)      '@@8001 EX KAJI DEL
+                    Index = Array.IndexOf(Ww_ItemName, .Fields(i).Name)             '@@8001 EX KAJI ADD
+                    If Index <> -1 AndAlso IsDBNull(.Fields(i).Value) = False Then
+
+                        Value = RTrim(.Fields(i).Value)
+
+                        Select Case Index
+                            Case 0 : Ww_Param.strHeaderTitleFlag = Value
+                            Case 1 : Ww_Param.strRTrimFlag = Value
+                            Case 2 : Ww_Param.strCheckOverWriteFlag = Value
+                            Case 3 : Ww_Param.strSepareteLetter = Value
+                            Case 4 : Ww_Param.strEnclosureSign = Value
+                        End Select
+                    End If
+                Next
+
+                'For i = 0 To Ww_ItemName.Length - 1
+                '    If IsDBNull(.Fields(Ww_ItemName(i)).Value) = False Then
+                '        Value = RTrim(.Fields(Ww_ItemName(i)).Value)
+
+                '        Select Case i
+                '            Case 0 : Ww_Param.strHeaderTitleFlag = Value
+                '            Case 1 : Ww_Param.strRTrimFlag = Value
+                '            Case 2 : Ww_Param.strCheckOverWriteFlag = Value
+                '            Case 3 : Ww_Param.strSepareteLetter = Value
+                '            Case 4 : Ww_Param.strEnclosureSign = Value
+                '        End Select
+                '    End If
+                'Next
+
+            End If
+        End With
+
+        Return Ww_Param
+    End Function
+
+    Public Function CSVParamSet(ByVal Q_Header As Char, ByVal Q_Rtrim As Char, ByVal Q_Check As Char, ByVal Q_Separete As Char, ByVal Q_Sign As Char) As CSV_Param
+        '************************************************** CSV規定値を パラメータより作成
+        Dim W_Param As CSV_Param
+
+        '----------------------------------------
+        With W_Param
+            .strHeaderTitleFlag = Q_Header
+            .strRTrimFlag = Q_Rtrim
+            .strCheckOverWriteFlag = Q_Check
+            .strSepareteLetter = Q_Separete
+            .strEnclosureSign = Q_Sign
+        End With
+
+        Return W_Param
+    End Function
+End Class
