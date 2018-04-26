@@ -1,0 +1,115 @@
+    ''' <summary>
+    ''' event KeyPress of control numberic
+    ''' </summary>
+    Protected Overrides Sub OnKeyPress(e As KeyPressEventArgs)
+
+        Select Case e.KeyChar
+            Case "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"
+                GoTo OnKeyPress_001
+            Case Else
+                e.Handled = False
+                GoTo OnKeyPress_End
+        End Select
+OnKeyPress_001:
+        '------------------------------------------------------------
+        If (IsDBNull(Me.Value) = False) Then
+            Dim strTemp(2) As String
+            Dim numTemp(2) As Decimal
+            Dim strText As String = ""
+            Dim strValue As String = ""
+            Dim strSelection As String = ""
+            Dim numIndex As Integer = Me.SelectionStart
+            Dim intLengthSelect As Integer = 0
+            '-------------------------------------------------------
+            strValue = Me.Value
+            strText = Me.Text
+            numIndex = Me.SelectionStart
+            intLengthSelect = Me.SelectionLength
+            '-------------------------------------------------------
+            strSelection = strText.Substring(0, numIndex)
+            '-------------------------------------------------------
+            If strValue.ToString.IndexOf(".") > 0 Then
+                strTemp = strValue.ToString.Split(".")
+            Else
+                strTemp(0) = strValue.ToString
+                strTemp(1) = "0"
+            End If
+            '-------------------------------------------------------
+            If RTrim(strTemp(0)) = "" Then
+                strTemp(0) = "0"
+            End If
+            If RTrim(strTemp(1)) = "" Then
+                strTemp(1) = "0"
+            End If
+            '-------------------------------------------------------
+            numTemp(0) = CDec(strTemp(0))
+            numTemp(1) = CDec(strTemp(1))
+            '-------------------------------------------------------
+            If strSelection.IndexOf(".") > -1 Then
+                'compare and check the number of decimal characters
+                If numTemp(1) >= _DecimalValue Then
+                    e.Handled = True
+                End If
+            Else
+                'compare and check the number of characters integer part
+                If strValue >= 0 Then
+                    'compare and check maxValue
+                    If (numTemp(0) >= MaxValue) _
+                        OrElse (CStr(numTemp(0)).Length >= CStr(MaxValue).Length) Then
+                        If intLengthSelect = 0 Then
+                            e.Handled = True
+                        End If
+                    End If
+                Else
+                    'compare and check minValue
+                    If (numTemp(0) <= MinValue) _
+                        OrElse (CStr(numTemp(0)).Length >= CStr(MinValue).Length) Then
+                        If intLengthSelect = 0 Then
+                            e.Handled = True
+                        End If
+                    End If
+                End If
+            End If
+        End If
+OnKeyPress_End:
+        MyBase.OnKeyPress(e)
+    End Sub
+    ''' <summary>
+    ''' event Leave of control numberic
+    ''' </summary>
+    Protected Overrides Sub OnLeave(e As EventArgs)
+
+        Dim gC1FlexGrid As C1FlexGrid = DirectCast(Me.Parent, C1FlexGrid)
+        '---------------------------------------
+        AddHandler gC1FlexGrid.LeaveCell, AddressOf C1FlexGrid1_LeaveCell
+        '---------------------------------------
+        MyBase.OnLeave(e)
+    End Sub
+    ''' <summary>
+    ''' setting envent LeaveCell C1FlexGrid
+    ''' </summary>
+    Private Sub C1FlexGrid1_LeaveCell(sender As Object, e As EventArgs)
+
+        Dim cellRG As CellRange
+        Dim gC1FlexGrid As C1FlexGrid = DirectCast(sender, C1FlexGrid)
+        '-----------------------------------------------------
+        cellRG = gC1FlexGrid.GetCellRange(gC1FlexGrid.RowSel, gC1FlexGrid.ColSel)
+        '-----------------------------------------------------
+        If IsDBNull(gC1FlexGrid(gC1FlexGrid.RowSel, gC1FlexGrid.ColSel)) = False Then
+            If IsNumeric(gC1FlexGrid(gC1FlexGrid.RowSel, gC1FlexGrid.ColSel)) = False Then
+                GoTo C1FlexGrid1_LeaveCell_END
+            End If
+            '------------------------------------------------------------
+            If gC1FlexGrid(gC1FlexGrid.RowSel, gC1FlexGrid.ColSel) < 0 Then
+                'set ForeColor = Red when value input < 0
+                cellRG.StyleNew.ForeColor = Color.Red
+            Else
+                'set ForeColor = WindowText when value input > 0
+                cellRG.StyleNew.ForeColor = System.Drawing.SystemColors.WindowText
+            End If
+        End If
+        '---------------------------------------------------------------
+C1FlexGrid1_LeaveCell_END:
+        RemoveHandler gC1FlexGrid.LeaveCell, AddressOf C1FlexGrid1_LeaveCell
+
+    End Sub
