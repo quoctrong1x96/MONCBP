@@ -1,0 +1,409 @@
+Option Strict Off
+Option Explicit On 
+Imports System.IO
+
+Module C00_600XB
+   
+    Public Const ORATYPE_VARCHAR2 As Integer = 1    '@@8001 EX KAJI ADD ↓
+    Public Const ORATYPE_NUMBER As Integer = 2
+    Public Const ORATYPE_SINT As Integer = 3
+    Public Const ORATYPE_FLOAT As Integer = 4
+    Public Const ORATYPE_STRING As Integer = 5
+    Public Const ORATYPE_VARCHAR As Integer = 9
+    Public Const ORATYPE_DATE As Integer = 12
+    Public Const ORATYPE_UINT As Integer = 68
+    Public Const ORATYPE_CHAR As Integer = 96
+    Public Const ORATYPE_CHARZ As Integer = 97
+    Public Const ORATYPE_CHAR2 As Integer = 98      '@@8001 EX KAJI ADD ↑
+    Public WG_ErrCod As Integer
+    Public WG_ErrTxt As String
+    Public W_SelectItem As String = " "  '20120703 added by xiaohy
+    Private WithEvents W_ERR_CHK As New DFW_C00_CF0XC
+
+    Sub W_ERR_CHK_ERR(ByVal SENDER As Object, ByVal E As EXIST_ERR_ARG) Handles W_ERR_CHK.INPUTERR
+        '************************************************** CF0XC エラーメッセージ
+        WG_ErrCod = 4
+        WG_ErrTxt = E.PSTR_ERR_MSG
+    End Sub
+
+    Public Sub CreateCSV(ByVal ReportNo As Integer, ByVal strFileName As String, ByVal strSQL As String, ByVal CSV_Info As C00_600XC.CSV_Param, Optional ByVal Q_CsvLastName As Boolean = True)
+        '************************************************** CSVファイルを生成する。
+        Dim Ww_Dynaset As Object
+        Dim Ww_Path As String
+        Ww_Dynaset = Nothing            '@@8001 EX KAJI ADD
+        Ww_Path = ""                    '@@8001 EX KAJI ADD
+        '---------------------------------------- 基準情報・ＤＢ情報取得
+        If SetDBInfo() = False Then
+            GoTo C00_600XB
+        End If
+
+        '---------------------------------------- パラメータ確認
+        If Chk_All(LTrim(strSQL)) = False Then
+            GoTo C00_600XB
+        End If
+
+        '---------------------------------------- ＳＱＬ実行
+        If SQL_Execute(strSQL, CSV_Info.strRTrimFlag, Ww_Dynaset) = False Then
+            GoTo C00_600XB
+        End If
+        '20160612 MODIFIED BY WANGWW BEGIN
+        'If (IsNothing(Ww_Dynaset)) OrElse (Ww_Dynaset.RecordCount = 0) Then
+        If (IsNothing(Ww_Dynaset)) OrElse Ww_Dynaset.Rows.Count = 0 Then
+            '20160612 MODIFIED BY WANGWW END
+            WG_ErrCod = 2
+            WG_ErrTxt = "出力データがありません"
+            GoTo C00_600XB
+        End If
+
+        '---------------------------------------- 出力先確認
+        If GetFilePath(ReportNo, strFileName, Ww_Path, Q_CsvLastName) = False Then
+            GoTo C00_600XB
+        End If
+
+        If Chk_OutPutFile(Ww_Path, CSV_Info.strCheckOverWriteFlag) = False Then
+            GoTo C00_600XB
+        End If
+
+        '---------------------------------------- データ出力
+        If OutPutCSV(Ww_Path, Ww_Dynaset, CSV_Info) = False Then
+            GoTo C00_600XB
+        End If
+
+        '---------------------------------------- 出力先保存
+        If SaveFilePath(ReportNo, Ww_Path) = False Then
+            GoTo C00_600XB
+        End If
+
+        WG_ErrCod = 0
+        WG_ErrTxt = "正常終了"
+
+C00_600XB:
+        '---------------------------------------- 終了処理
+        Ww_Dynaset = Nothing
+        If (OraDatabase Is Nothing) = False Then
+           
+            OraDatabase.Dispose()  '20160612 MODIFIED BY ECT WANGWW
+        End If
+    End Sub
+    Public Sub CreateCSV_2(ByVal ReportNo As Integer, ByVal strFileName As String, ByVal dataTable As DataTable, ByVal CSV_Info As C00_600XC.CSV_Param, Optional ByVal Q_CsvLastName As Boolean = True)
+        '************************************************** CSVファイルを生成する。
+        Dim Ww_Path As String
+        Ww_Path = ""
+        '---------------------------------------- 基準情報・ＤＢ情報取得
+        If SetDBInfo() = False Then
+            GoTo C00_600XB
+        End If
+        If (IsNothing(dataTable)) OrElse dataTable.Rows.Count = 0 Then
+            WG_ErrCod = 2
+            WG_ErrTxt = "出力データがありません"
+            GoTo C00_600XB
+        End If
+
+        '---------------------------------------- 出力先確認
+        If GetFilePath(ReportNo, strFileName, Ww_Path, Q_CsvLastName) = False Then
+            GoTo C00_600XB
+        End If
+
+        If Chk_OutPutFile(Ww_Path, CSV_Info.strCheckOverWriteFlag) = False Then
+            GoTo C00_600XB
+        End If
+
+        '---------------------------------------- データ出力
+        If OutPutCSV(Ww_Path, dataTable, CSV_Info) = False Then
+            GoTo C00_600XB
+        End If
+
+        '---------------------------------------- 出力先保存
+        If SaveFilePath(ReportNo, Ww_Path) = False Then
+            GoTo C00_600XB
+        End If
+
+        WG_ErrCod = 0
+        WG_ErrTxt = "正常終了"
+
+C00_600XB:
+        '---------------------------------------- 終了処理
+        If (OraDatabase Is Nothing) = False Then
+            OraDatabase.Dispose()
+        End If
+    End Sub
+    Public Sub CreateCSV_3(ByVal ReportNo As Integer, ByVal strFileName As String, ByVal strSQL As String, ByVal strFilePath As String, ByVal CSV_Info As C00_600XC.CSV_Param, Optional ByVal Q_CsvLastName As Boolean = True)
+        '************************************************** CSVファイルを生成する。
+        Dim Ww_Dynaset As Object
+        Dim Ww_Path As String
+        Ww_Dynaset = Nothing
+        Ww_Path = ""
+        '---------------------------------------- 基準情報・ＤＢ情報取得
+        If SetDBInfo() = False Then
+            GoTo C00_600XB
+        End If
+
+        '---------------------------------------- パラメータ確認
+        If Chk_All(LTrim(strSQL)) = False Then
+            GoTo C00_600XB
+        End If
+
+        '---------------------------------------- ＳＱＬ実行
+        If SQL_Execute(strSQL, CSV_Info.strRTrimFlag, Ww_Dynaset) = False Then
+            GoTo C00_600XB
+        End If
+        If (IsNothing(Ww_Dynaset)) OrElse Ww_Dynaset.Rows.Count = 0 Then
+            WG_ErrCod = 2
+            WG_ErrTxt = "出力データがありません"
+            GoTo C00_600XB
+        End If
+
+        Ww_Path = strFilePath   'ファイルのパス
+
+        '---------------------------------------- データ出力
+        If OutPutCSV(Ww_Path, Ww_Dynaset, CSV_Info) = False Then
+            GoTo C00_600XB
+        End If
+
+        '---------------------------------------- 出力先保存
+        If SaveFilePath(ReportNo, Ww_Path) = False Then
+            GoTo C00_600XB
+        End If
+
+        WG_ErrCod = 0
+        WG_ErrTxt = "正常終了"
+
+C00_600XB:
+        '---------------------------------------- 終了処理
+        Ww_Dynaset = Nothing
+        If (OraDatabase Is Nothing) = False Then
+            OraDatabase.Dispose()
+        End If
+    End Sub
+    '20170831 ADDED BY ECT YUANCHAO END
+    Private Function SetDBInfo() As Boolean
+        '************************************************** 基準情報・ＤＢ情報セット
+        Dim C00_001XA As Object
+        '---------------------------------------- 基準情報取得
+        Call C00_000XA_Result()
+        '---------------------------------------- データベース接続
+        C00_001XA = New DFW_C00_001X.C00_001XC
+        Result = C00_001XA.Init(IniDrive, IniFile, Computer_Name, Save_Serv, Save_User, Save_Pass, OraSession, OraDatabase, SW_Err)
+        C00_001XA = Nothing
+
+        If SW_Err = "1" Then
+            Return False
+        Else
+            Return True
+        End If
+    End Function
+
+    Private Function Chk_All(ByVal strSQL As String) As Boolean
+        '************************************************** パラメータ確認
+        Dim strCommand As String
+
+        '------------------------------------
+        strCommand = Mid(strSQL, 1, strSQL.IndexOf(" ")).ToUpper
+        If strCommand <> "SELECT" Then
+            WG_ErrCod = 1
+            WG_ErrTxt = "引数に誤りがあります"
+            Return False
+        End If
+
+        Return True
+    End Function
+
+    Private Function SQL_Execute(ByVal strSQL As String, ByVal strRTrim As String, ByRef P_Dynaset As Object) As Boolean
+        '************************************************** ＳＱＬ実行
+        Dim Ww_Flags As Object
+        Dim Ww_SqlCord As Integer
+        '------------------------------------- 
+        On Error GoTo ORA_ERR_EXIT
+
+        If strRTrim = "1" Then
+            Ww_Flags = DynasetFlags.OraDyn_ReadOnly
+        Else
+            Ww_Flags = DynasetFlags.OraDyn_DFW_Default
+        End If
+
+        System.GC.Collect()
+        'P_Dynaset = OraDatabase.DbcreateDynaset(strSQL, Ww_Flags)
+        P_Dynaset = OraDatabase.DataTable(strSQL)
+
+        Return True
+
+ORA_ERR_EXIT:
+        '======================================== オラクルエラー処理
+        Call oo_OrErr(Ww_SqlCord)
+        WG_ErrCod = 999
+        WG_ErrTxt = Ww_SqlCord.ToString & " " & OraDatabase.LastServerErrText
+        Return False
+    End Function
+    Private Function GetFilePath(ByVal ReportNo As Integer, ByVal strFileName As String, ByRef Ww_Path As String, ByVal Q_CsvLastName As Boolean) As Boolean    '@@8001 EX KAJI ADD
+        '************************************************** 出力先パスを取得する
+        Dim Ww_Where As String
+        Dim Ww_SqlCord As Integer
+        Ww_Where = ""           '@@8001 EX KAJI ADD
+        Ww_Where = Ww_Where & " コンピュータ = '" & Work_Computer & "'"
+        Ww_Where = Ww_Where & " AND プログラムID = '" & Work_Program & "'"
+        Ww_Where = Ww_Where & " AND NO = '" & ReportNo & "'"
+
+        GEQ_CF0C(Ww_SqlCord, "", Ww_Where)
+        If Ww_SqlCord <> 0 Then
+            WG_ErrCod = 999
+            WG_ErrTxt = Ww_SqlCord.ToString & " " & OraDatabase.LastServerErrText
+            Return False
+        End If
+
+        If CF0C_RecordCount = 0 Then
+            '------------------------------------ 基準情報
+            Ww_Path = IniDrive & strFileName & ".csv"
+        Else
+            If RTrim(CF0C_Dt.Rows(0).Item("ドライブ")) <> "" Then
+                Ww_Path = RTrim(CF0C_Dt.Rows(0).Item("ドライブ"))
+                '20160612 MODIFIED BY ECT WANGWW END
+                If Mid(Ww_Path, Len(Ww_Path), 1) <> ":" Then
+                    Ww_Path = Ww_Path & ":"
+                End If
+            End If
+            '--------------------------------
+            If RTrim(CF0C_Dt.Rows(0).Item("フォルダ")) <> "" Then
+                Ww_Path = Ww_Path & RTrim(CF0C_Dt.Rows(0).Item("フォルダ"))
+            End If
+            '20160612 MODIFIED BY ECT WANGWW END
+            '--------------------------------
+            'If RTrim((!ファイル).Value) <> "" Then
+            If RTrim(CF0C_Dt.Rows(0).Item("ファイル")) <> "" Then  '20160612 MODIFIED BY ECT WANGWW
+                If Mid(Ww_Path, Len(Ww_Path), 1) <> "\" Then
+                    Ww_Path = Ww_Path & "\"
+                End If
+
+                'Ww_Path = Ww_Path & RTrim((!ファイル).Value)
+
+                If Q_CsvLastName Then
+                    'Ww_Path = Ww_Path & RTrim((!ファイル).Value)
+                    Ww_Path = Ww_Path & RTrim(CF0C_Dt.Rows(0).Item("ファイル"))  '20160612 MMODIFIED BY ECT WANGWW
+                Else
+                    Ww_Path = Ww_Path & RTrim(strFileName)
+                End If
+            Else
+                'If RTrim((!拡張子).Value) <> "" Then
+                If RTrim(CF0C_Dt.Rows(0).Item("拡張子")) <> "" Then  '20160612 MODIFIED BY ECT WANGWW
+                    If Mid(Ww_Path, Len(Ww_Path), 1) <> "\" Then
+                        Ww_Path = Ww_Path & "\"
+                    End If
+                    Ww_Path = Ww_Path & "*"
+                Else
+                    If Mid(Ww_Path, Len(Ww_Path), 1) = "\" Then
+                        Ww_Path = Mid(Ww_Path, 1, Len(Ww_Path) - 1)
+                    End If
+                End If
+            End If
+            '--------------------------------
+            
+            If RTrim(CF0C_Dt.Rows(0).Item("拡張子")) <> "" Then
+                Ww_Path = Ww_Path & "." & RTrim(CF0C_Dt.Rows(0).Item("拡張子"))
+            End If
+           
+        End If
+
+        Return True
+    End Function
+
+    Private Function Chk_OutPutFile(ByRef A_Path As String, ByVal OverWrite As String) As Boolean
+        '************************************************** 出力先ファイルの確認
+        
+        Dim SaveFileDlg As New SaveFileDialog
+
+        SaveFileDlg.Title = "ＣＳＶ出力ファイル選択"
+        SaveFileDlg.FileName = A_Path
+        SaveFileDlg.Filter = "csv files (*.csv)|*.csv|All files (*.*)|*.*"
+        SaveFileDlg.FilterIndex = 1
+        SaveFileDlg.CheckFileExists = False ' ファイルが無くてもエラーにしない
+
+        If OverWrite = "1" Then
+            SaveFileDlg.OverwritePrompt = True
+        Else
+            SaveFileDlg.OverwritePrompt = False
+        End If
+
+        If SaveFileDlg.ShowDialog() = DialogResult.Cancel Then
+            WG_ErrCod = 3
+            WG_ErrTxt = "出力先選択時、キャンセルを選択しました"
+            Return False
+        End If
+
+        A_Path = SaveFileDlg.FileName
+
+        '---------------------------------------- 桁数チェック
+        W_ERR_CHK.CLR_PROP()
+        W_ERR_CHK.PSTR_ERR_PATH = A_Path
+        If RTrim(W_ERR_CHK.PSTR_ERR_PATH) = "" Then
+            Return False
+        End If
+
+        '---------------------------------------- パス確認
+        If Not Directory.Exists(Path.GetDirectoryName(A_Path)) Then
+            WG_ErrCod = 5
+            WG_ErrTxt = "出力ファイルのディレクトリが存在しません"
+            Return False
+        End If
+
+        Return True
+    End Function
+
+    Private Function SaveFilePath(ByVal ReportNo As Integer, ByVal Path As String) As Boolean
+        '************************************************** ファイルパスの保存
+        Dim Ww_Drive As String
+        Dim Ww_Folder As String
+        Dim Ww_File As String
+        Dim Ww_Type As String
+        Dim Ww_Where As String
+        Dim Ww_SqlCord As Integer
+        Ww_Drive = ""               '@@8001 EX KAJI ADD ↓
+        Ww_Folder = ""
+        Ww_File = ""
+        Ww_Type = ""
+        Ww_Where = ""
+        Ww_SqlCord = 0              '@@8001 EX KAJI ADD ↑
+        '---------------------------------------- ファイルパス分解
+        Call SplitFilePath(Path, Ww_Drive, Ww_Folder, Ww_File, Ww_Type)
+
+        '---------------------------------------- 項目転送
+        With CF0C
+            .コンピュータ = Work_Computer
+            .プログラムID = Work_Program
+            .NO = ReportNo
+            .ドライブ = Ww_Drive
+            .フォルダ = Ww_Folder
+            .ファイル = Ww_File
+            .拡張子 = Ww_Type
+            .備考1 = " "
+            .備考2 = " "
+        End With
+
+        '---------------------------------------- フォルダコントロール更新
+        'OraSession.BeginTrans()  '20160612 DELETE BY ECT WANGWW
+
+        Ww_Where = Ww_Where & " コンピュータ = '" & Work_Computer & "'"
+        Ww_Where = Ww_Where & " AND プログラムID = '" & Work_Program & "'"
+        Ww_Where = Ww_Where & " AND NO = '" & ReportNo & "'"
+
+        GEQ_CF0C(Ww_SqlCord, "1", Ww_Where)
+       
+        If CF0C_RecordCount > 0 And Ww_SqlCord = 0 Then
+            DEL_CF0C(Ww_SqlCord, Ww_Where)      ' UPD_CFOC() が使えない為、Delete -> Insert 処理
+        End If
+        If Ww_SqlCord = 0 Then
+            INS_CF0C(Ww_SqlCord)
+        End If
+
+        If Ww_SqlCord <> 0 Then
+            WG_ErrCod = 999
+            WG_ErrTxt = Ww_SqlCord.ToString & " " & OraDatabase.LastServerErrText
+            ' OraSession.ResetTrans()
+            OraDatabase.RollBack() '20160612 MODIFIED BY ECT WANGWW
+            Return False
+        End If
+
+        'OraSession.CommitTrans()
+        OraDatabase.Commit()  '20160612 MODIFIED BY ECT WANGWW
+        OraDatabase.ReStart()  '20160612 ADDED BY ECT WANGWW
+        Return True
+    End Function
+
