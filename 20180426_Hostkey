@@ -1,0 +1,33 @@
+    ''' <summary>
+    ''' ショートカットキー
+    ''' </summary>
+    ''' <param name="e"></param>
+    ''' <param name="Button"></param>
+    Private Sub ShortKey(ByVal e As System.Windows.Forms.KeyEventArgs, ByVal Button As System.Windows.Forms.Button)
+        Select Case e.KeyCode
+            Case 38 ' ･･･ Shift + ↑   
+                If e.Shift Then
+                    Button.PerformClick()
+                End If
+        End Select
+    End Sub
+    
+    ''' <summary>
+    ''' グリッドの表示]ボタン
+    ''' </summary>
+    ''' <param name="sender"></param>
+    ''' <param name="e"></param>
+    Private Sub G_円筒台帳明細_Paint(sender As Object, e As PaintEventArgs) Handles G_円筒台帳明細.Paint
+        '--------------------------------------------------------------------------- 
+        For Each hosted As HostedControl In arrList
+            hosted.UpdatePosition()
+        Next
+        '20180413 FJN PHUOC-TT ADD START
+        For Each hosted As HostedControl In arrList2
+            hosted.UpdatePosition()
+        Next
+        '20180413 FJN PHUOC-TT ADD END
+        For i As Integer = 1 To sender.Rows.Count - 1
+            sender(i, 0) = i.ToString()
+        Next
+    End Sub
