@@ -1,0 +1,166 @@
+
+    Private Function OutPutCSV(ByVal Ww_Path As String, ByVal Ww_Dynaset As Object, ByVal CSV_Info As C00_600XC.CSV_Param) As Boolean
+        '************************************************** ＣＳＶ出力
+        Dim Ww_Writer As StreamWriter
+        Dim Ww_FirstColFlag As Boolean
+        Dim Ww_strData As String
+        Dim Ww_strValue As String
+        Dim Ww_Col As Integer
+        Dim Ww_Row As Integer  '20160613 ADDED BY ECT WANGWW
+        Dim Ww_Separete As Char
+        Ww_Writer = Nothing             '@@8001 EX KAJI ADD
+        '-------------------- セパレータ文字 変換
+        Select Case CSV_Info.strSepareteLetter
+            Case "1" : Ww_Separete = ","
+            Case "2" : Ww_Separete = vbTab
+            Case "3" : Ww_Separete = " "
+            Case "4" : Ww_Separete = ";"
+            Case Else : Ww_Separete = ","
+        End Select
+        Dim d() As String = W_SelectItem.Split(",")  '20120703 added by xiaohy
+
+        Try
+            '------------------------------------ ファイル生成
+            Ww_Writer = New StreamWriter(Ww_Path, False, System.Text.Encoding.GetEncoding("Shift_JIS"))
+
+            With Ww_Dynaset
+                '-------------------------------- フィールド名出力
+                If CSV_Info.strHeaderTitleFlag = "1" Then
+                    Ww_FirstColFlag = True
+                    'For Ww_Col = 0 To .Fields.Count - 1
+                    For Ww_Col = 0 To Ww_Dynaset.Columns.Count - 1  '20160612 MODIFIED BY ECT WANGWW
+                        '20120703 MODIFIED BY XIAOHY START
+                        If d.Length = 1 OrElse d(Ww_Col) = 1 Then  '表示項目設定なしまたは表示項目設定で表示に設定した場合
+                            'Ww_strData = MakeCSVData(.Fields(Ww_Col).Name, .Fields(Ww_Col).Name, ORATYPE_CHAR, Ww_Separete, CSV_Info.strEnclosureSign, Ww_FirstColFlag)
+                            Ww_strData = MakeCSVData(Ww_Dynaset.Columns(Ww_Col).ToString, Ww_Dynaset.Columns(Ww_Col).ToString, ORATYPE_CHAR, Ww_Separete, CSV_Info.strEnclosureSign, Ww_FirstColFlag)  '20160612 MODIFIED BY ECT WANGWW
+                            Ww_Writer.Write(Ww_strData)
+                        End If
+                        '20120703 MODIFIED BY XIAOHY END
+                        'Ww_strData = MakeCSVData(.Fields(Ww_Col).Name, .Fields(Ww_Col).Name, ORATYPE_CHAR, Ww_Separete, CSV_Info.strEnclosureSign, Ww_FirstColFlag)
+                        'Ww_Writer.Write(Ww_strData)
+                    Next
+                    Ww_Writer.Write(vbCrLf)
+                End If
+                '-------------------------------- フィールド値出力
+                ' Do While .EOF = False  '20160612 DELETE BY ECT WANGWW
+                For Ww_Row = 0 To Ww_Dynaset.Rows.Count - 1  '20160612 ADDED BY ECT WANGWW
+                    Ww_FirstColFlag = True
+                    'For Ww_Col = 0 To (.Fields.Count - 1)
+                    For Ww_Col = 0 To (Ww_Dynaset.Columns.Count - 1)  '20160612 MODIFIED BY ECT WANGWW
+                        'If IsDBNull(.Fields(Ww_Col).Value) Then
+                        If IsDBNull(Ww_Dynaset.Rows(Ww_Row).Item(Ww_Col).ToString) Then  '20160612 MODIFIED BY ECT WANGWW
+                            Ww_strValue = ""
+                        Else
+                            'Ww_strValue = .Fields(Ww_Col).Value
+                            '20160818 MODIFIED BY XIAXUE BEGIN
+                            'Ww_strValue = Ww_Dynaset.Rows(Ww_Row).Item(Ww_Col).ToString   '20160612 MODIFIED BY ECT WANGWW
+                            Ww_strValue = Ww_Dynaset.Rows(Ww_Row).Item(Ww_Col).ToString.Trim
+                            '20160818 MODIFIED BY XIAXUE END
+                        End If
+
+                        '20120703 MODIFIED BY XIAOHY START
+                        If d.Length = 1 OrElse d(Ww_Col) = 1 Then '表示項目設定なしまたは表示項目設定で表示に設定した場合
+                            '20160817 MODIFIED BY XIAXUE BEGIN
+                            'Ww_strData = MakeCSVData(.Fields(Ww_Col).Name, Ww_strValue, .Fields(Ww_Col).OraIDataType, Ww_Separete, CSV_Info.strEnclosureSign, Ww_FirstColFlag)
+                            Ww_strData = MakeCSVData(Ww_Dynaset.Columns(Ww_Col).ToString, Ww_strValue, ORATYPE_CHAR, Ww_Separete, CSV_Info.strEnclosureSign, Ww_FirstColFlag)  '20160612 MODIFIED BY ECT WANGWW
+                            '20160817 MODIFIED BY XIAXUE END
+                            Ww_Writer.Write(Ww_strData)
+                        End If
+                        'Ww_strData = MakeCSVData(.Fields(Ww_Col).Name, Ww_strValue, .Fields(Ww_Col).OraIDataType, Ww_Separete, CSV_Info.strEnclosureSign, Ww_FirstColFlag)
+                        'Ww_Writer.Write(Ww_strData)
+                        '20120703 MODIFIED BY XIAOHY END
+                    Next
+                    Ww_Writer.Write(vbCrLf)
+                    ' .MoveNext()  '20160612 DELETE BY ECT WANGWW
+                    'Loop  '20160612 DELETE BY ECT WANGWW
+                Next
+            End With
+            '------------------------------------ ファイルクローズ
+            Ww_Writer.Close()
+            Return True
+        Catch
+            If Not IsNothing(Ww_Writer) Then
+                Ww_Writer.Close()
+            End If
+            WG_ErrCod = 99
+            WG_ErrTxt = Err.Number.ToString & " " & Err.Description
+        End Try
+
+        Return False
+    End Function
+
+    Private Function MakeCSVData(ByVal Name As String, ByVal Value As String, ByVal Type As Object, ByVal Separete As String, ByVal Sign As String, ByRef FirstFlag As Boolean) As String
+        '************************************************** 出力用文字列作成
+        Dim strData As String = ""
+        '---------------------------------------- 項目名より出力対象外
+        If Name = "コンピュータ" Or Name = "プログラム" Then
+            Return ""
+        End If
+
+        '---------------------------------------- セパレータ付加
+        If FirstFlag = False Then
+            strData += Separete
+        End If
+
+        '---------------------------------------- 型が文字列の場合、データを記号で囲む
+        If (Type = ORATYPE_CHAR) OrElse _
+           (Type = ORATYPE_CHARZ) OrElse _
+           (Type = ORATYPE_CHAR2) OrElse _
+           (Type = ORATYPE_VARCHAR) OrElse _
+           (Type = ORATYPE_VARCHAR2) Then
+
+            If Sign.Chars(0) = Nothing Then
+                strData += Value
+            Else
+                strData += Sign + Value + Sign
+            End If
+        Else
+            strData += Value
+        End If
+
+        FirstFlag = False
+        Return strData
+    End Function
+
+    Private Sub SplitFilePath(ByVal Path As String, ByRef A_Dir As String, ByRef A_Folder As String, ByRef A_File As String, ByRef A_Type As String)
+        '************************************************** パスを分解する
+        Dim i As Short
+        Dim W_PathAry() As String
+        Dim W_FileAry() As String
+
+        '---------------------------------------- ドライブ・フォルダ
+        If Mid(Path, 1, 1) >= "A" And Mid(Path, 1, 1) <= "Z" Then '@@3041 ENG GAKIYA ADD
+            A_Dir = Mid(Path, 1, 1)
+        Else                                                      '@@3041 ENG GAKIYA ADD↓
+            A_Dir = " "
+        End If                                                    '@@3041 ENG GAKIYA ADD↑
+        W_PathAry = Split(Path, "\")
+        If UBound(W_PathAry) > 1 Then
+            For i = LBound(W_PathAry) + 1 To UBound(W_PathAry) - 1
+                A_Folder = A_Folder & "\" & W_PathAry(i)
+            Next
+        Else
+            A_Folder = " "
+        End If
+
+        '---------------------------------------- ファイル名・拡張子
+        W_FileAry = Split(W_PathAry(UBound(W_PathAry)), ".")
+        If UBound(W_FileAry) > 0 Then
+            For i = LBound(W_FileAry) To UBound(W_FileAry) - 1
+                If i = UBound(W_FileAry) - 1 Then
+                    A_File = A_File & W_FileAry(i)
+                Else
+                    A_File = A_File & W_FileAry(i) & "."
+                End If
+            Next
+            A_Type = W_FileAry(UBound(W_FileAry))
+        ElseIf UBound(W_FileAry) = 0 Then
+            A_File = W_FileAry(LBound(W_FileAry))
+            A_Type = " "
+        Else
+            A_File = " "
+            A_Type = " "
+        End If
+    End Sub
+
+End Module
