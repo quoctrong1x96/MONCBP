@@ -1,0 +1,103 @@
+static class M20_010SB
+{
+    public static string DG_KUBUN2;
+    public static string DG_MEISHO1;
+    public static string DG_MEISHO2;
+    public static string DG_SELECT;
+    public static string DG_抽出K;
+    public static string DG_SQL;
+
+    public static void Main()
+    {
+    }
+}
+// *******************************************************************************
+internal class M20_010SF : System.Windows.Forms.Form
+{
+    public M20_010SF() : base()
+    {
+        if (m_vb6FormDefInstance == null)
+        {
+            if (m_InitializingDefInstance)
+                m_vb6FormDefInstance = this;
+            else
+                try
+                {
+                    if (System.Reflection.Assembly.GetExecutingAssembly().EntryPoint.DeclaringType == this.GetType)
+                        m_vb6FormDefInstance = this;
+                }
+                catch
+                {
+                }
+        }
+        InitializeComponent();
+    }
+    protected new override void Dispose(bool Disposing)
+    {
+        if (Disposing)
+        {
+            if (!components == null)
+                components.Dispose();
+        }
+        base.Dispose(Disposing);
+    }
+}
+// *******************************************************************************
+[System.Runtime.InteropServices.ProgId("M20_010SC_NET.M20_010SC")]
+public class M20_010SC
+{
+    public object Init(ref object Q_OraDatabase, ref object Q_Save_Serv, ref object Q_Save_User, ref object Q_Save_Pass, ref object Q_名称K1, ref object A_名称K2, ref object Q_抽出K, ref object Q_ODPConnection)
+    {
+        // *************************************
+        Init = "";                               // @@8001 ENG YONASHIRO ADD
+        // -------------------------------------
+        M20_010SF.DefInstance.ShowDialog();
+        // -------------------------------------
+        A_名称K2 = DG_KUBUN2;
+        // -------------------------------------
+        M20_010SF.DefInstance.Close();
+        M20_010SF.DefInstance.Dispose();
+    }
+}
+// *******************************************************************************
+internal class M20_010SF : System.Windows.Forms.Form
+{
+    public M20_010SF() : base()
+    {
+        if (m_vb6FormDefInstance == null)
+        {
+            if (m_InitializingDefInstance)
+                m_vb6FormDefInstance = this;
+            else
+                try
+                {
+                    if (System.Reflection.Assembly.GetExecutingAssembly().EntryPoint.DeclaringType == this.GetType)
+                        m_vb6FormDefInstance = this;
+                }
+                catch
+                {
+                }
+        }
+        InitializeComponent();
+    }
+    private static M20_010SF m_vb6FormDefInstance;
+    private static bool m_InitializingDefInstance;
+    public static M20_010SF DefInstance
+    {
+        get
+        {
+            if (m_vb6FormDefInstance == null || m_vb6FormDefInstance.IsDisposed)
+            {
+                m_InitializingDefInstance = true;
+                m_vb6FormDefInstance = new M20_010SF();
+                m_InitializingDefInstance = false;
+            }
+            DefInstance = m_vb6FormDefInstance;
+        }
+        set
+        {
+            m_vb6FormDefInstance = Value;
+        }
+    }
+}
+
