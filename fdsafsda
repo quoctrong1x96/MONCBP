@@ -1,0 +1,311 @@
+Option Strict Off
+Option Explicit On
+Imports System.Windows.Forms
+Imports CYG_C00_000X
+Imports System.Text
+'*******************************************************************************
+' System : Factory-ONE 電脳工場
+' Title  : 
+' Version: R 2.0.0
+'-------------------------------------------------------------------------------
+' 新  規 : 20180913 FJN PHUOC-TT       新規開発       T_CHIYODA-4564] ＜納品＞FJN_＜仕様変更：ユーザー検証要＞受注入力【転写】変更時の注意喚起_4361
+'******************************************************************************
+Module CYG_CM0_910XF
+
+#Region "変数定義"
+    '************************************************
+    Public getLog As Microsoft.VisualBasic.Logging.Log
+    Dim C00_000X As CYG_C00_000XC = New CYG_C00_000XC
+    Dim MailPro As CYG_C00_000XC.MailProperty
+
+    Dim StartProgram As String = "BatchProgram"
+    Dim MaxFileSize As Integer = 8000000
+    Dim CustomLocation As String = IO.Directory.GetParent(System.IO.Directory.GetCurrentDirectory()).FullName & "\Log"
+    Dim BaseFileName As String = System.Reflection.Assembly.GetExecutingAssembly.GetCustomAttributes(GetType(System.Reflection.AssemblyTitleAttribute), True).GetValue(0).title
+    Dim DBH As DBHelper.DBHelper
+#End Region
+
+    Sub Main(ByVal cmdArgs() As String)
+        Ini_Log()
+        Set_Log("=================================")
+        Set_Log("*****売上明細の品番変更の通知******")
+        Ini_Environment()
+        '--------------------------
+        Try
+            InitDB()
+            Send_Mail()
+        Catch ex As Exception
+            Set_Log(ex.Message)
+        Finally
+            If DBH IsNot Nothing Then
+                DBH.Dispose()
+            End If
+            '--------------------------
+            End_Environment()
+            Set_Log("*********************************")
+            End_Log()
+            Set_Log("=================================")
+        End Try
+    End Sub
+
+    Private Sub Ini_Environment()
+        If Environment.GetEnvironmentVariable("StartProgram") Is Nothing Then
+            Environment.SetEnvironmentVariable("StartProgram", StartProgram)
+        End If
+        If Environment.GetEnvironmentVariable("LogName") Is Nothing Then
+            Environment.SetEnvironmentVariable("LogName", BaseFileName)
+        End If
+        If Environment.GetEnvironmentVariable("LogMaxFileSize") Is Nothing Then
+            Environment.SetEnvironmentVariable("LogMaxFileSize", MaxFileSize)
+        End If
+        If Environment.GetEnvironmentVariable("LogCustomLocation") Is Nothing Then
+            Environment.SetEnvironmentVariable("LogCustomLocation", CustomLocation)
+        End If
+    End Sub
+
+    Private Sub End_Environment()
+        Environment.SetEnvironmentVariable("StartProgram", Nothing)
+        Environment.SetEnvironmentVariable("LogName", Nothing)
+        Environment.SetEnvironmentVariable("LogMaxFileSize", Nothing)
+        Environment.SetEnvironmentVariable("LogCustomLocation", Nothing)
+    End Sub
+
+#Region "Send Mail"
+    Private Sub Send_Mail()
+        Dim dt As DataTable = Get_DATA()
+        For Each row As DataRow In dt.Rows
+            Send_Mail_Detail(row)
+        Next
+        DBH.Update(dt, "CYG_CM9W")
+        DBH.Commit()
+        Set_Log("*********************************")
+        Set_Log("--メールを正常に送信する。")
+    End Sub
+
+    Private Sub Send_Mail_Detail(ByRef row As DataRow)
+        Dim mailTitle As String = ""
+        Dim strMailNote As String = ""
+        Dim mailPro As New CYG_C00_000X.CYG_C00_000XC.MailProperty
+        Dim kubun As String = "63"
+        '------------------------
+        mailTitle = "受注" & row("受注No") & "-" & row("受注No枝番") & "の売上明細の品番が変更されました"
+        mailPro = C00_000X.getMailProp
+        '-----------------
+        mailPro.hasMsg = False
+        mailPro.msg = ""
+        strMailNote = SetMailNote(mailTitle, row("DATANAME"), row("受注No"), row("受注No枝番"))
+        '------------------------
+        If strMailNote <> "" Then
+            Try
+                SetMailProperty(kubun, mailTitle, strMailNote, mailPro, row("受注No"), row("受注No枝番"))
+                If mailPro.Recipient.Trim = "" Then
+                    mailPro.hasMsg = True
+                    mailPro.msg = mailTitle & "のメールアドレスが設定されていません。"
+                    Set_Log("エラー内容 : " & mailPro.msg)
+                Else
+                    C00_000X.SendMailByNetMail(mailPro)
+                    row("送られたF") = "1"
+                End If
+            Catch ex As Exception
+                Set_Log("エラー内容 : " & ex.Message)
+            End Try
+        End If
+    End Sub
+    Private Function SetMailNote(ByVal mailTitle As String, ByVal data As String, ByVal 受注No As String, ByVal 受注No枝番 As String)
+        Dim MailNote As String = ""
+        Dim MailNote_TITLE As String = ""
+        Dim Str_DataDetail As String = ""
+        '------------------------------
+        '通知データを抽出
+        Dim txtList As List(Of String) = New List(Of String)
+        txtList.Add("関係各位")
+        txtList.Add(" ")
+        txtList.Add("受注No " & 受注No & "-" & 受注No枝番 & "の売上明細の品番が変更されました。")
+        If data(0).Equals("1"c) Then
+            Addデータ(Str_DataDetail, "在庫データ")
+        End If
+        If data(1).Equals("1"c) Then
+            Addデータ(Str_DataDetail, "出荷依頼データ")
+        End If
+        If data(2).Equals("1"c) Then
+            Addデータ(Str_DataDetail, "出荷指示データ")
+        End If
+        If data(3).Equals("1"c) Then
+            Addデータ(Str_DataDetail, "出荷実績データ")
+        End If
+        txtList.Add("古い品番の" & Str_DataDetail & "が残されています。")
+        txtList.Add("ご確認ください。")
+        '--------------------------
+        MailNote_TITLE = "<table width=""100%"">"
+        MailNote_TITLE += "<tr><th colspan=""10""><font size=""5"">☆" & mailTitle & "</th></tr> "
+        MailNote_TITLE += "</table>"
+        '--------------------------
+        mailDetail(txtList, MailNote)
+        '--------------------------
+        MailNote = MailNote_TITLE & MailNote
+        Return MailNote
+    End Function
+
+    Private Sub mailDetail(ByVal list As List(Of String), ByRef MailNote_Body As String)
+        MailNote_Body += "<br>"
+        MailNote_Body += "<table>"
+        For Each text As String In list
+            MailNote_Body += "<tr>"
+            MailNote_Body += "<td nowrap>" & text & "</td>"
+            MailNote_Body += "</tr>"
+        Next
+        MailNote_Body += "</table>"
+    End Sub
+
+    Private Sub SetMailProperty(ByVal strKubun As String, ByVal mailTitle As String, ByVal mailNote As String, ByRef mailPro As CYG_C00_000X.CYG_C00_000XC.MailProperty, ByVal 受注No As String, ByVal 受注No枝番 As String)
+        Dim drRecipientM50M As DataRow
+        Dim dtRecipientMA0M As DataTable = New DataTable
+        Dim drRecipientJ10F As DataRow
+        Dim Str_Sql_MA0M As StringBuilder = New StringBuilder
+        Dim Str_Sql_M50M As StringBuilder = New StringBuilder
+        Dim Str_Sql_J10F As StringBuilder = New StringBuilder
+        Dim recipientArrayList As ArrayList = New ArrayList
+        Dim ht As New Hashtable()
+        '--------------------------- CYG_MA0M with Kubun
+        Str_Sql_MA0M.Append(" SELECT DISTINCT(RTRIM(メールアドレス)) AS メールアドレス ")
+        Str_Sql_MA0M.Append(" FROM CYG_MA0M ")
+        Str_Sql_MA0M.AppendFormat(" WHERE  RTRIM(メールアドレス) IS NOT NULL AND 区分 = '{0}' ", strKubun)
+        Str_Sql_MA0M.Append("   AND RTRIM(メールアドレス) IS NOT NULL")
+        '---------------------------DFW_M50M join DFW_J10F
+        Str_Sql_J10F.Append(" SELECT DISTINCT(RTRIM(M50M.メールアドレス)) AS メールアドレス ")
+        Str_Sql_J10F.Append(" FROM DFW_M50M M50M ")
+        Str_Sql_J10F.Append("      ,DFW_J10F J10F ")
+        Str_Sql_J10F.AppendFormat(" WHERE (J10F.製番 = '{0}-{1}' AND M50M.人員C = J10F.担当C) ", 受注No, 受注No枝番)
+        Str_Sql_J10F.Append("   AND RTRIM(M50M.メールアドレス) IS NOT NULL")
+        '---------------------------
+        Str_Sql_M50M.Append(" SELECT DISTINCT(RTRIM(M50M.メールアドレス)) AS メールアドレス ")
+        Str_Sql_M50M.Append(" FROM DFW_M50M M50M ")
+        Str_Sql_M50M.AppendFormat(" WHERE M50M.人員C = '{0}' ", Save_Ope)
+        Str_Sql_M50M.Append("   AND RTRIM(M50M.メールアドレス) IS NOT NULL")
+        Try
+            dtRecipientMA0M = DBH.DataTable(Str_Sql_MA0M.ToString)
+            drRecipientM50M = DBH.Row(Str_Sql_M50M.ToString)
+            drRecipientJ10F = DBH.Row(Str_Sql_J10F.ToString)
+            '--------------------------MAIL GROUP MA0M: 高橋副事業部長、藤原課長、地下課長、坂本さん、伴さん
+            For Each dtRow As DataRow In dtRecipientMA0M.Rows
+                recipientArrayList.Add(dtRow.Item("メールアドレス"))
+            Next
+            '--------------------------MAIL OTHER: 営業担当者、データ更新者
+            If drRecipientM50M IsNot Nothing Then
+                recipientArrayList.Add(drRecipientM50M.Item("メールアドレス"))
+            End If
+            If drRecipientJ10F IsNot Nothing Then
+                recipientArrayList.Add(drRecipientJ10F.Item("メールアドレス"))
+            End If
+            '---------------------------DISTINCT MAIL ADDRESS
+            For Each item As String In recipientArrayList
+                ht.Item(item) = Nothing
+            Next
+            recipientArrayList = New ArrayList(ht.Keys)
+            '---------------------------
+            Dim str As String = ""
+            For Each item As String In recipientArrayList
+                str += item & ";"
+            Next
+            '--------------------------
+            If str <> "" Then
+                str = str.Remove(str.Length - 1, 1)
+            End If
+            mailPro.Recipient = str
+            mailPro.Subject = mailTitle & "_" & String.Format("{0:yyyy/MM/dd_HH:mm:ss}", Now)
+            mailPro.Body = mailNote
+        Catch ex As Exception
+            Set_Log("エラー内容 : " & ex.Message)
+        End Try
+    End Sub
+
+#End Region
+
+#Region "Log"
+
+    Private Sub Ini_Log()
+        getLog = My.Application.Log
+        getLog.DefaultFileLogWriter.DiskSpaceExhaustedBehavior = Logging.DiskSpaceExhaustedOption.ThrowException
+        getLog.DefaultFileLogWriter.MaxFileSize = MaxFileSize
+        getLog.DefaultFileLogWriter.CustomLocation = CustomLocation
+        getLog.DefaultFileLogWriter.BaseFileName = BaseFileName
+        getLog.DefaultFileLogWriter.AutoFlush = True
+        Try
+            getLog.DefaultFileLogWriter.Write("[" & DateTime.Now & "] ")
+            getLog.DefaultFileLogWriter.Close()
+        Catch ex As Exception
+            getLog.DefaultFileLogWriter.Dispose()
+            Microsoft.VisualBasic.Interaction.MsgBox(ex.Message, 16)
+            End
+        End Try
+    End Sub
+
+    Public Sub Set_Log(ByVal Log As String)
+        Try
+            getLog.DefaultFileLogWriter.Write(Log)
+            getLog.DefaultFileLogWriter.WriteLine("")
+            getLog.DefaultFileLogWriter.Close()
+        Catch ex As Exception
+            getLog.DefaultFileLogWriter.Dispose()
+            Microsoft.VisualBasic.Interaction.MsgBox(ex.Message, 16)
+            End
+        End Try
+    End Sub
+
+    Public Sub End_Log()
+        Try
+            getLog.DefaultFileLogWriter.WriteLine("[" & DateTime.Now & "] 正常終了")
+            getLog.DefaultFileLogWriter.Close()
+            getLog.DefaultFileLogWriter.Dispose()
+
+        Catch ex As Exception
+            getLog.DefaultFileLogWriter.Dispose()
+            Microsoft.VisualBasic.Interaction.MsgBox(ex.Message, 16)
+            End
+        End Try
+    End Sub
+
+#End Region
+
+#Region "DB"
+    '************************
+    ' クネクションを初期化する
+    '***********************
+    Public Sub InitDB()
+        Dim C00_001XA As DFW_C00_001X.C00_001XC
+        C00_001XA = New DFW_C00_001X.C00_001XC
+        '------------------------------------------- サービス／ユーザー／パスワード取得
+        Call C00_000XA_Result()
+        '------------------------------------------- Ｉｎｉファイル／コンピュータ名／セッション・データベース接続
+        Result = C00_001XA.Init(IniDrive, IniFile, Computer_Name, Save_Serv, Save_User, Save_Pass, OraSession, OraDatabase, SW_Err)
+        Dim connStr As String
+        connStr = "User Id=" & Save_User & ";" & "Password=" & Save_Pass & ";" & "Data Source=" & Save_Serv & ";"
+
+        DBH = OraDatabase
+
+        Work_Computer = Computer_Name
+        Work_Program = IO.Path.GetFileNameWithoutExtension(Application.ExecutablePath)
+        Call_Program = IO.Path.GetFileNameWithoutExtension(Application.ExecutablePath)
+
+    End Sub
+
+    Private Function Get_DATA() As DataTable
+        Dim dt As DataTable = New DataTable
+        Str_Sql = "DELETE CYG_CM9W WHERE 送られたF = '1'"
+        DBH.executeSql(Str_Sql)
+        Str_Sql = "SELECT * "
+        Str_Sql = Str_Sql & "FROM CYG_CM9W "
+        Str_Sql = Str_Sql & "WHERE 送られたF = '0' "
+        dt = DBH.DataTable(Str_Sql)
+        Return dt
+    End Function
+
+    Private Sub Addデータ(ByRef dataNames As String, ByVal dataName As String)
+        If dataNames = "" Then
+            dataNames = dataName
+        Else
+            dataNames &= "、" & dataName
+        End If
+    End Sub
+#End Region
+End Module
