@@ -1,0 +1,198 @@
+package com.cybozu.garoon3.test;
+
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.StringReader;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathExpression;
+import javax.xml.xpath.XPathExpressionException;
+import javax.xml.xpath.XPathFactory;
+
+import org.apache.axiom.om.OMElement;
+import org.apache.commons.cli.MissingArgumentException;
+import org.apache.commons.cli.ParseException;
+import org.apache.xml.dtm.ref.DTMNodeList;
+import org.w3c.dom.Document;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
+
+import au.com.bytecode.opencsv.CSVReader;
+import au.com.bytecode.opencsv.CSVWriter;
+
+import com.cybozu.garoon3.common.CBServiceClient;
+import com.cybozu.garoon3.common.Config;
+import com.cybozu.garoon3.message.MessageGetThreadsById;
+import com.cybozu.garoon3.message.MessageResponseUtil;
+import com.cybozu.garoon3.usecase.util.CSVUtil;
+import com.cybozu.garoon3.usecase.util.OptionsParser;
+
+/**
+ * ユーザー情報の取得を行うサンプルプログラムです。
+ * 
+ * @author $api_author Garoon Team@Cybozu$
+ * @version $api_version ver 1.0.0$
+ */
+public class TEST {
+
+	/**
+	 * サンプルプログラムを実行します。
+	 * 
+	 * @param args
+	 *            オプション
+	 * @throws IOException
+	 *             ファイル入出力時に問題が発生した場合
+	 * @throws MissingArgumentException
+	 *             必要な引数が足りない場合
+	 * @throws ParseException
+	 *             引数にエラーがある場合
+	 */
+	public static void main(String[] args) throws IOException, MissingArgumentException, ParseException {
+		// Option check
+		OptionsParser parser = new OptionsParser(args);
+		if (!parser.hasAccountFileName())
+			throw new MissingArgumentException("Missing -g option _ setting file");
+
+		if (!parser.hasInputFileName())
+			throw new MissingArgumentException("Missing -i option _ input file");
+
+		if (!parser.hasOutputFileName())
+			throw new MissingArgumentException("Missing -o option _ output file");
+
+		// Add users
+		List<Integer> threadList = getThreadIDList(parser.getInputFileName());
+
+		// Create client
+		CBServiceClient client = new CBServiceClient();
+		Config config = new Config(parser.getAccountFileName());
+		client.load(config);
+                
+                
+
+		// Create action
+		MessageGetThreadsById action = new MessageGetThreadsById();
+                //MessageResponseUtil.getThreadList(response)
+                
+                threadList.forEach((thread) -> {
+                    action.addThreadId(thread);
+            });
+
+		// Get result
+		OMElement result = client.sendReceive(action);
+
+		// Output file
+		if (!parser.hasOutputFileName())
+			return;
+
+		List<Map<String, String>> userList = getUserInfoList(result);
+		writeFile(parser.getOutputFileName(), userList);
+
+	}
+
+    /**
+     * ユーザー情報をファイルにCSV形式で出力します。
+     * 
+     * @param filename 出力ファイル名
+     * @param data ユーザーデータ
+     * @throws IOException ファイル出力時のエラー
+     */
+	private static void writeFile(String filename, List<Map<String, String>> data) throws IOException {
+            //Write header
+            try (CSVWriter writer = new CSVWriter(new FileWriter(filename))) {
+                //Write header
+                writer.writeNext(new String[]{"userId", "login_name", "display_name"});
+                
+                data.stream().map((user) -> {
+                    List<String> line = new ArrayList<>();
+                    line.add(user.get("userId"));
+                    line.add(user.containsKey("login_name") ? user.get("login_name") : "");
+                    line.add(user.containsKey("display_name") ? user.get("display_name") : "");
+                    return line;
+                }).forEachOrdered((line) -> {
+                    writer.writeNext(line.toArray(new String[] {}));
+                });
+            }
+	}
+
+    /**
+     * APIのレスポンスを元にユーザー情報を取得します。
+     * 
+     * @param APIのレスポンス
+     * @return List<Map<String, String>> ユーザーデータリスト
+     */
+	private static List<Map<String, String>> getUserInfoList(OMElement node) {
+		List<Map<String, String>> users = new ArrayList<>();
+
+		Document document;
+		try {
+			DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+			DocumentBuilder builder = factory.newDocumentBuilder();
+			document = builder.parse(new InputSource(new StringReader(node.toString())));
+		} catch (IOException | SAXException | ParserConfigurationException e) {
+			return Collections.emptyList();
+		}
+
+		DTMNodeList nodeList;
+		try {
+			String expression = "GetUserDetailByIdsResponse/returns/userDetail";
+
+			XPath xPath = XPathFactory.newInstance().newXPath();
+			XPathExpression xPathExpression = xPath.compile(expression);
+			nodeList = (DTMNodeList) xPathExpression.evaluate(document, XPathConstants.NODESET);
+		} catch (XPathExpressionException e) {
+			return Collections.emptyList();
+		}
+
+		for (int i = 0; i < nodeList.getLength(); i++) {
+			Node data = nodeList.item(i);
+			NodeList c = data.getChildNodes();
+			Map<String, String> user = new HashMap<>();
+
+			for (int j = 0; j < c.getLength(); j++)
+				if (c.item(j).getNodeType() == Node.ELEMENT_NODE)
+					user.put(c.item(j).getNodeName(), c.item(j)
+							.getTextContent().trim());
+
+			users.add(user);
+		}
+
+		return users;
+	}
+	
+    /**
+     * 入力ファイルから取得するユーザーのIDを取得します。
+     * 
+     * @param inputFileName 入力ファイル名
+     * @return List<Integer> ユーザーIDリスト
+     * @throws IOException ファイル読み込み時のエラー
+     */
+	private static List<Integer> getThreadIDList(String inputFileName)	throws IOException {
+            List<Integer> userIdList;
+            try ( // Read input csv file
+                    CSVReader reader = new CSVReader(new FileReader(inputFileName))) {
+                List<String> userIdStringList = CSVUtil.getColumn(reader, "thread_id");
+                // Parse String to Integer
+                userIdList = new ArrayList<>();
+                userIdStringList.forEach((String id) -> {
+                    try {
+                        userIdList.add(Integer.valueOf(id));
+                    } catch (NumberFormatException e) {
+                        e.getMessage();
+                    }
+                });
+            }
+		return userIdList;
+	}
+}
