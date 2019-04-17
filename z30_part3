@@ -1,0 +1,394 @@
+            END IF;
+            O_ERRCD := G_ERRCD;
+            O_ERRTX := G_ERRTX || ' IN CYG_C00_Z30_COMMON.Z30_DEL_BY_LEADER ';
+            -- ===================================
+            -- 20110518 DELETED BY ECT LIANGHC
+            -- ===================================
+            --RAISE ERROR_OCCURED;
+        WHEN OTHERS THEN
+            IF CUR_GET_CLOSE_DATE%ISOPEN THEN
+                CLOSE CUR_GET_CLOSE_DATE;
+            END IF;
+            IF CUR_LOT_CTRL%ISOPEN THEN
+                CLOSE CUR_LOT_CTRL;
+            END IF;
+            O_ERRCD := SQLCODE;
+            O_ERRTX := SQLERRM || ' IN CYG_C00_Z30_COMMON.Z30_DEL_BY_LEADER ';
+            -- ===================================
+            -- 20110518 DELETED BY ECT LIANGHC
+            -- ===================================
+            --RAISE ERROR_OCCURED;
+    END Z30_DEL_BY_LEADER;
+--
+    --==========================================================================
+    -- Name   : Z30_DEL_BY_LEADER2
+    -- Desc   : 発生元KEYより在庫受払レコードを一括削除
+    -- History: 12-MAY-2011  ECT LIANGHC  ADDED
+    -- Note   :
+    --==========================================================================
+    PROCEDURE Z30_DEL_BY_LEADER2(
+        I_LEADKEY  IN     CYG_Z30F.発生元KEY%TYPE,
+        I_LEADFILE IN     CYG_Z30F.発生元ファイル%TYPE,
+        O_ERRCD    IN OUT NUMBER,
+        O_ERRTX    IN OUT VARCHAR2)
+    IS
+        -- 削除したい在庫受払レコードを抽出用カーソル
+        CURSOR CUR_GET_DATA
+        IS
+            SELECT *
+              FROM CYG_Z30F Z30F
+             WHERE Z30F.発生元KEY  = I_LEADKEY
+               AND Z30F.発生元ファイル = I_LEADFILE;
+--
+        -- 当月月次締日
+        CURSOR CUR_GET_CLOSE_DATE
+        IS
+            SELECT M10M.当月月次締日
+              FROM DFW_M10M M10M
+             WHERE M10M.KEY = '01';
+--
+        -- ロット管理かどうか
+        CURSOR CUR_LOT_CTRL(
+            P_ITEM_K DFW_M40M.品目K%TYPE,
+            P_ITEM_C DFW_M40M.品目C%TYPE)
+        IS
+            SELECT M40M.FILLER20
+              FROM DFW_M40M M40M
+             WHERE M40M.品目K = P_ITEM_K
+               AND M40M.品目C = P_ITEM_C;
+--
+        X_CNT NUMBER := 0;
+        X_CLOSE_DATE CHAR(10);
+        X_LOT_CTRL_F DFW_M40M.FILLER20%TYPE;
+    BEGIN
+        G_ERRCD := 0;
+        G_ERRTX := NULL;
+        G_INV_F := C_SPACE;
+        -- 当月月次締日
+        OPEN CUR_GET_CLOSE_DATE;
+        FETCH CUR_GET_CLOSE_DATE INTO X_CLOSE_DATE;
+        IF CUR_GET_CLOSE_DATE%NOTFOUND THEN
+            G_ERRCD := 2;
+            G_ERRTX := C_NO_CLOSE_DATE;
+            RAISE SUB_ERROR;
+        END IF;
+        CLOSE CUR_GET_CLOSE_DATE;
+--
+        -- 削除したい在庫受払レコードを抽出
+        FOR REC_Z30F IN CUR_GET_DATA LOOP
+            X_CNT := X_CNT + 1;
+            IF REC_Z30F.受払k IN (8, 9) THEN
+                -- 受払データを削除
+                CYG_C00_Z30.DEL_OPE(
+                    P_REC   => REC_Z30F,
+                    P_ERRCD => G_ERRCD,
+                    P_ERRTX => G_ERRTX);
+                IF G_ERRCD <> 0 THEN
+                    RAISE SUB_ERROR;
+                END IF;
+            ELSE
+                -- 在庫ファイルデータ更新
+                CYG_C00_Z10.UPD_OPE_受払(
+                    P_REC   => REC_Z30F,
+                    P_MODE  => C_MINUS,
+                    P_HIZUK => X_CLOSE_DATE,
+                    P_ERRCD => G_ERRCD,
+                    P_ERRTX => G_ERRTX);
+                IF G_ERRCD <> 0 THEN
+                    RAISE SUB_ERROR;
+                END IF;
+                -- ロット管理があるかどうかチェックする
+                OPEN CUR_LOT_CTRL(
+                    P_ITEM_K => REC_Z30F.品目k,
+                    P_ITEM_C => REC_Z30F.品目C);
+                FETCH CUR_LOT_CTRL INTO X_LOT_CTRL_F;
+                IF X_LOT_CTRL_F = '1' THEN
+                    -- 在庫受払からロット在庫管理Ｆを更新
+                    CYG_C00_Z40.UPD_OPE_受払(
+                        P_REC   => REC_Z30F,
+                        P_MODE  => C_MINUS,
+                        P_HIZUK => X_CLOSE_DATE,
+                        P_ERRCD => G_ERRCD,
+                        P_ERRTX => G_ERRTX);
+                    IF G_ERRCD <> 0 THEN
+                        RAISE SUB_ERROR;
+                    END IF;
+                END IF;
+                CLOSE CUR_LOT_CTRL;
+                -- 受払データを削除
+                CYG_C00_Z30.DEL_OPE(
+                    P_REC   => REC_Z30F,
+                    P_ERRCD => G_ERRCD,
+                    P_ERRTX => G_ERRTX);
+                IF G_ERRCD <> 0 THEN
+                    RAISE SUB_ERROR;
+                END IF;
+            END IF;
+            --20141230 ADDED BY ZHUSAI BEGIN
+            Z40_Z10_DEL(REC_Z30F,G_ERRCD,G_ERRTX);
+            IF G_ERRCD <> 0 THEN
+                RAISE SUB_ERROR;
+            END IF;
+            --20141230 ADDED BY ZHUSAI END
+        END LOOP;
+--
+        IF X_CNT = 0 THEN
+            -- 削除したい在庫受払情報が見つかりません。
+            G_ERRCD := 2;
+            G_ERRTX := C_DELETE_ERR;
+            RAISE SUB_ERROR;
+        END IF;
+
+    EXCEPTION
+        WHEN SUB_ERROR THEN
+            IF CUR_GET_CLOSE_DATE%ISOPEN THEN
+                CLOSE CUR_GET_CLOSE_DATE;
+            END IF;
+            IF CUR_LOT_CTRL%ISOPEN THEN
+                CLOSE CUR_LOT_CTRL;
+            END IF;
+            O_ERRCD := G_ERRCD;
+            O_ERRTX := G_ERRTX || ' IN CYG_C00_Z30_COMMON.Z30_DEL_BY_LEADER2 ';
+            -- ===================================
+            -- 20110518 DELETED BY ECT LIANGHC
+            -- ===================================
+            --RAISE ERROR_OCCURED;
+        WHEN OTHERS THEN
+            IF CUR_GET_CLOSE_DATE%ISOPEN THEN
+                CLOSE CUR_GET_CLOSE_DATE;
+            END IF;
+            IF CUR_LOT_CTRL%ISOPEN THEN
+                CLOSE CUR_LOT_CTRL;
+            END IF;
+            O_ERRCD := SQLCODE;
+            O_ERRTX := SQLERRM || ' IN CYG_C00_Z30_COMMON.Z30_DEL_BY_LEADER2 ';
+            -- ===================================
+            -- 20110518 DELETED BY ECT LIANGHC
+            -- ===================================
+            --RAISE ERROR_OCCURED;
+    END Z30_DEL_BY_LEADER2;
+--
+    --==========================================================================
+    -- Name   : Z30_INS_UPD_RESERVE
+    -- Desc   : 在庫受払レコードを挿入,予定受払い情報を更新
+    -- History: 20-APR-2011  ECT LIANGHC  CREATED
+    --        : 20120917 XIAOHY 予定受払削除時、予定数がマイナスになった場合は、数量をマイナスで更新する
+    -- Note   :
+    --==========================================================================
+    PROCEDURE Z30_INS_UPD_RESERVE(
+        I_LEADSEQ  IN     CYG_Z30F.受払SEQ%TYPE,
+        I_LEADSEQ2 IN     CYG_Z30F.受払SEQ2%TYPE,
+        I_Z30REC   IN     CYG_Z30F%ROWTYPE,
+        I_UPD_K    IN     CHAR,
+        O_ERRCD    IN OUT NUMBER,
+        O_ERRTX    IN OUT VARCHAR2)
+    IS
+        -- 変数定義
+        REC_Z30F  CYG_Z30F%ROWTYPE;
+        X_REMNANT NUMBER;    -- 予定残量
+--        REC_Z30F_UPD CYG_Z30F%ROWTYPE;
+    BEGIN
+        G_ERRCD := 0;
+        G_ERRTX := NULL;
+        G_INV_F := C_SPACE;
+        IF I_LEADSEQ IS NULL OR I_LEADSEQ2 IS NULL THEN
+            -- 在庫受払SEQは必須とする
+            G_ERRCD := 2;
+            G_ERRTX := C_NO_SEQ_ERR;
+            RAISE SUB_ERROR;
+        END IF;
+        -- 在庫受払レコードを挿入
+        Z30_INS(
+            I_Z30REC => I_Z30REC,
+            O_ERRCD => G_ERRCD,
+            O_ERRTX => G_ERRTX);
+        IF G_ERRCD <> 0 THEN
+            RAISE SUB_ERROR;
+        END IF;
+        -- 予定受払レコード更新区分が削除
+        IF I_UPD_K = '1' THEN
+            Z30_DEL(
+                I_Z30SEQ  => I_LEADSEQ,
+                I_Z30SEQ2 => I_LEADSEQ2,
+                O_ERRCD   => G_ERRCD,
+                O_ERRTX   => G_ERRTX);
+            IF G_ERRCD <> 0 THEN
+                RAISE SUB_ERROR;
+            END IF;
+        ELSIF I_UPD_K = '0' THEN
+            REC_Z30F.受払SEQ  := I_LEADSEQ;
+            REC_Z30F.受払SEQ2 := I_LEADSEQ2;
+            -- 予定受払情報を取得
+            CYG_C00_Z30.GEQ_OPE(
+                P_REC   => REC_Z30F,
+                P_INV   => G_INV_F,
+                P_UPDAT => '1',
+                P_ERRCD => G_ERRCD,
+                P_ERRTX => G_ERRTX);
+            IF G_ERRCD <> 0 THEN
+                RAISE SUB_ERROR;
+            END IF;
+            --IF REC_Z30F.荷姿 IS NULL OR REC_Z30F.荷姿数 IS NULL THEN
+            IF REC_Z30F.荷姿 IS NULL OR REC_Z30F.荷姿数 IS NULL  OR REC_Z30F.荷姿 = 0 THEN  --20120917 MODIFIED BY XIAOHY
+                IF I_Z30REC.品目K = REC_Z30F.品目K
+                    AND I_Z30REC.品目C = REC_Z30F.品目C
+                    AND I_Z30REC.原反K = REC_Z30F.原反K
+                    AND I_Z30REC.用紙K = REC_Z30F.用紙K
+                    AND I_Z30REC.工程C = REC_Z30F.工程C
+                    AND I_Z30REC.明細NO = REC_Z30F.明細NO
+                THEN
+                    -- 予定残量を計算
+                    X_REMNANT := REC_Z30F.数量 - I_Z30REC.数量;
+                    --IF X_REMNANT <= 0 THEN
+                    IF X_REMNANT = 0 THEN  --20120917 MODIFIED BY XIAOHY
+                        -- 予定情報の削除
+                        Z30_DEL(
+                            I_Z30SEQ  => I_LEADSEQ,
+                            I_Z30SEQ2 => I_LEADSEQ2,
+                            O_ERRCD   => G_ERRCD,
+                            O_ERRTX   => G_ERRTX);
+                        IF G_ERRCD <> 0 THEN
+                            RAISE SUB_ERROR;
+                        END IF;
+                    ELSE
+                        REC_Z30F.数量 := X_REMNANT;
+                        --REC_Z30F.最終変更日 := SYSDATE;
+                        REC_Z30F.最終変更日 := TO_CHAR(SYSDATE, 'YYYY/MM/DD');  --20130515 MODIFIED BY XIAOHY
+                        -- 予定情報の更新
+                        Z30_UPD(
+                            I_Z30REC => REC_Z30F,
+                            O_ERRCD  => G_ERRCD,
+                            O_ERRTX  => G_ERRTX);
+                        IF G_ERRCD <> 0 THEN
+                            RAISE SUB_ERROR;
+                        END IF;
+                    END IF;
+                END IF;
+            ELSE
+                IF I_Z30REC.品目K = REC_Z30F.品目K
+                    AND I_Z30REC.品目C = REC_Z30F.品目C
+                    AND I_Z30REC.原反K = REC_Z30F.原反K
+                    AND I_Z30REC.用紙K = REC_Z30F.用紙K
+                    AND I_Z30REC.工程C = REC_Z30F.工程C
+                    AND I_Z30REC.明細NO = REC_Z30F.明細NO
+                    AND I_Z30REC.荷姿 = REC_Z30F.荷姿
+                THEN
+                    -- 予定残量を計算
+                    X_REMNANT := REC_Z30F.数量 - I_Z30REC.数量;
+                    IF X_REMNANT <= 0 THEN
+                        -- 予定情報の削除
+                        Z30_DEL(
+                            I_Z30SEQ  => I_LEADSEQ,
+                            I_Z30SEQ2 => I_LEADSEQ2,
+                            O_ERRCD   => G_ERRCD,
+                            O_ERRTX   => G_ERRTX);
+                        IF G_ERRCD <> 0 THEN
+                            RAISE SUB_ERROR;
+                        END IF;
+                    ELSE
+                        IF REC_Z30F.荷姿数 <= I_Z30REC.荷姿数 THEN
+                            REC_Z30F.荷姿数 := 0;
+                        ELSE
+                            REC_Z30F.荷姿数 := REC_Z30F.荷姿数 - I_Z30REC.荷姿数;
+                        END IF;
+                        REC_Z30F.数量 := X_REMNANT;
+                        --REC_Z30F.最終変更日 := SYSDATE;
+                        REC_Z30F.最終変更日 := TO_CHAR(SYSDATE, 'YYYY/MM/DD');  --20130515 MODIFIED BY XIAOHY
+                        -- 予定情報の更新
+                        Z30_UPD(
+                            I_Z30REC => REC_Z30F,
+                            O_ERRCD  => G_ERRCD,
+                            O_ERRTX  => G_ERRTX);
+                        IF G_ERRCD <> 0 THEN
+                            RAISE SUB_ERROR;
+                        END IF;
+                    END IF;
+                END IF;
+            END IF;
+        END IF;
+    EXCEPTION
+        WHEN SUB_ERROR THEN
+            O_ERRCD := G_ERRCD;
+            O_ERRTX := G_ERRTX || ' IN CYG_C00_Z30_COMMON.Z30_INS_UPD_RESERVE ';
+            -- ===================================
+            -- 20110518 DELETED BY ECT LIANGHC
+            -- ===================================
+            --RAISE ERROR_OCCURED;
+        WHEN OTHERS THEN
+            O_ERRCD := SQLCODE;
+            O_ERRTX := SQLERRM || ' IN CYG_C00_Z30_COMMON.Z30_INS_UPD_RESERVE ';
+            -- ===================================
+            -- 20110518 DELETED BY ECT LIANGHC
+            -- ===================================
+            --RAISE ERROR_OCCURED;
+    END Z30_INS_UPD_RESERVE;
+
+
+    --==========================================================================
+    -- Name   : CLR_Z30
+    -- Desc   : 在庫受払レコードを初期化
+    --==========================================================================
+    PROCEDURE CLR_Z30(I_Z30REC  OUT  NOCOPY  CYG_Z30F%ROWTYPE)
+    IS
+    BEGIN
+        I_Z30REC.場所C             :=  ' ';
+        I_Z30REC.X31               :=  '31';
+        I_Z30REC.品目K             :=  ' ';
+        I_Z30REC.品目C             :=  ' ';
+        I_Z30REC.在庫受払日        :=  ' ';
+        I_Z30REC.受払SEQ           :=  0;
+        I_Z30REC.受払SEQ2          :=  0;
+        I_Z30REC.X08               :=  '08';
+        I_Z30REC.受払K             :=  ' ';
+        I_Z30REC.X10               :=  '10';
+        I_Z30REC.在管K             :=  ' ';
+        I_Z30REC.FILLER10          :=  ' ';
+        I_Z30REC.製番              :=  ' ';
+        I_Z30REC.構成ID            :=  ' ';
+        I_Z30REC.手配ID            :=  ' ';
+        I_Z30REC.工順              :=  0;
+        I_Z30REC.FILLER20          :=  ' ';
+        I_Z30REC.AMPMF             :=  ' ';
+        I_Z30REC.在庫担当C         :=  ' ';
+        I_Z30REC.要求元C           :=  ' ';
+        I_Z30REC.要求担当C         :=  ' ';
+        I_Z30REC.単位              :=  ' ';
+        I_Z30REC.数量              :=  0;
+        I_Z30REC.単価              :=  0;
+        I_Z30REC.金額              :=  0;
+        I_Z30REC.X04               :=  '04';
+        I_Z30REC.金額K             :=  ' ';
+        I_Z30REC.備考              :=  ' ';
+        I_Z30REC.発生元プログラム  :=  ' ';
+        I_Z30REC.発生元ファイル    :=  ' ';
+        I_Z30REC.発生元SEQ         :=  0;
+        I_Z30REC.発生元SEQ2        :=  0;
+        I_Z30REC.発生元KEY         :=  ' ';
+        I_Z30REC.FILLER30          :=  ' ';
+        I_Z30REC.伝送済F           :=  ' ';
+        I_Z30REC.在庫締日          :=  ' ';
+        I_Z30REC.新規登録日        :=  TO_CHAR(SYSDATE, 'YYYY/MM/DD');
+        I_Z30REC.最終変更日        :=  TO_CHAR(SYSDATE, 'YYYY/MM/DD');
+        I_Z30REC.XZ1               :=  'Z1';
+        I_Z30REC.在庫理由K         :=  ' ';
+        I_Z30REC.XZ2               :=  'Z2';
+        I_Z30REC.状態K             :=  ' ';
+        I_Z30REC.明細NO            :=  ' ';
+        I_Z30REC.梱包LOT1          :=  ' ';
+        I_Z30REC.梱包LOT2          :=  ' ';
+        I_Z30REC.工程C             :=  ' ';
+        I_Z30REC.印刷NO            :=  ' ';
+        I_Z30REC.スリットNO        :=  ' ';
+        I_Z30REC.分割NO            :=  ' ';
+        I_Z30REC.通しNO            :=  ' ';
+        I_Z30REC.荷姿              :=  0;
+        I_Z30REC.荷姿単位          :=  ' ';
+        I_Z30REC.荷姿数            :=  0;
+        I_Z30REC.荷姿数単位        :=  ' ';
+        I_Z30REC.原反K             :=  ' ';
+        I_Z30REC.用紙K             :=  ' ';
+        I_Z30REC.原反状態K         :=  ' ';
+        I_Z30REC.原反品質K         :=  ' ';
+    END CLR_Z30;
+
+END;
