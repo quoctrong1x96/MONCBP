@@ -1,0 +1,234 @@
+
+PROCEDURE Z30_INS(
+  I_Z30REC    IN    CYG_Z30F%ROWTYPE,
+    O_ERRCD       IN OUT  NUMBER,
+    O_ERRTX       IN OUT  VARCHAR2)
+  IS
+
+  W_Z30F_最新_FLG NUMBER(1); --ADDED BY SUKB 20130906
+  --------------- ワーク定義
+  WZ30F_REC  CYG_Z30F%ROWTYPE;
+  -- MODIFIED BY XIAXUE 20130227 START
+  --W_TANNKA		NUMBER(12,3);
+  W_Z30F最新_REC CYG_Z30F%ROWTYPE;
+  -- MODIFIED BY XIAXUE 20130227 END
+  --------------- コントロールマスタカーソル
+  CURSOR M10M_CUR IS
+  SELECT  当月月次締日
+  FROM  DFW_M10M
+  WHERE  KEY  =  '01';
+  M10M_REC  M10M_CUR%ROWTYPE;
+  --------------- 品目マスタカーソル
+  CURSOR  M40M_CUR  IS
+    SELECT  標準単位
+        ,在備K
+        ,NVL(FILLER20,' ')  AS FILLER20
+    FROM  DFW_M40M
+    WHERE  X31   =  '31'
+    AND    品目K  =  WZ30F_REC.品目K
+    AND    品目C  =  WZ30F_REC.品目C;
+  M40M_REC  M40M_CUR%ROWTYPE;
+  --MODIFIED BY XIAXUE 20130227 START
+/*
+    CURSOR CUR_Z30F_単価(P_LOTNO IN CHAR) IS    -- ADDED BY LIYL 20130105
+        SELECT 単価
+  FROM (SELECT *
+          FROM CYG_Z30F
+         WHERE FILLER10 = P_LOTNO AND 受払seq||受払seq2<>WZ30F_REC.受払SEQ||WZ30F_REC.受払SEQ2
+         order by 受払SEQ desc, 受払SEQ2 desc) Z30F
+ WHERE ROWNUM = 1;
+*/
+    CURSOR CUR_Z30F_最新(P_LOTNO IN CHAR) IS    -- ADDED BY LIYL 20130105
+        SELECT *
+  FROM (SELECT *
+          FROM CYG_Z30F
+         WHERE FILLER10 = P_LOTNO AND 受払seq||受払seq2<>WZ30F_REC.受払SEQ||WZ30F_REC.受払SEQ2
+         order by 受払SEQ desc, 受払SEQ2 desc) Z30F
+ WHERE ROWNUM = 1;
+  -- MODIFIED BY XIAXUE 20130227 END
+
+BEGIN
+  G_ERRCD := 0; --20111012 ADDED BY ECT LVLU
+  WZ30F_REC  := I_Z30REC;
+  --------------- コントロールマスタ参照
+  OPEN  M10M_CUR;
+  FETCH  M10M_CUR  INTO  M10M_REC;
+  CLOSE  M10M_CUR;
+  --------------- 品目マスタ参照
+  OPEN  M40M_CUR;
+  FETCH  M40M_CUR  INTO  M40M_REC;
+  CLOSE  M40M_CUR;
+
+  --MODIFIED BY SUKB 20130906 START
+  W_Z30F_最新_FLG := 0;
+  OPEN CUR_Z30F_最新(RTRIM(WZ30F_REC.filler10));
+  FETCH CUR_Z30F_最新 INTO W_Z30F最新_REC;
+  IF CUR_Z30F_最新%FOUND THEN
+      W_Z30F_最新_FLG := 1;
+  END IF;
+  CLOSE CUR_Z30F_最新;
+  --MODIFIED BY SUKB 20130906 END
+      --------------- 在庫管理判定
+    IF  (RTRIM(M40M_REC.在備K)  IS  NOT  NULL)  AND
+      (M40M_REC.在備K      <  '8'    )  THEN
+    --MODIFIED BY SUKB 201301024 START
+    --IF RTRIM(WZ30F_REC.品目K)<>'G' OR RTRIM(WZ30F_REC.発生元プログラム) = 'CYG_E60_100E' OR RTRIM(WZ30F_REC.発生元プログラム)= 'CYG_E30_100E' OR RTRIM(WZ30F_REC.発生元プログラム)= 'CYG_E80_100E' OR RTRIM(WZ30F_REC.発生元プログラム)= 'CYG_H60_100E' THEN
+    IF RTRIM(WZ30F_REC.品目K)<>'G' OR RTRIM(WZ30F_REC.発生元プログラム) = 'CYG_E60_100E' OR RTRIM(WZ30F_REC.発生元プログラム)= 'CYG_E30_100E' OR RTRIM(WZ30F_REC.発生元プログラム)= 'CYG_E80_100E' OR RTRIM(WZ30F_REC.発生元プログラム)= 'CYG_H60_100E' OR RTRIM(WZ30F_REC.発生元プログラム)= 'CYG_E80_200E' THEN
+    --MODIFIED BY SUKB 201301024 END
+       WZ30F_REC.単価     := WZ30F_REC.単価; -- ADDED 20130105 LIYL
+       WZ30F_REC.FILLER30 := WZ30F_REC.Filler30;-- ADDED BY XIAXUE 20130227
+    ELSIF RTRIM(WZ30F_REC.発生元プログラム) = 'CYG_E10_10' THEN
+       WZ30F_REC.FILLER30 := WZ30F_REC.Filler30;-- ADDED BY XIAOHY 20130325
+    ELSE
+        --MODIFIED BY XIAXUE 20130227 START
+         /*
+         OPEN CUR_Z30F_単価(WZ30F_REC.filler10);
+         FETCH CUR_Z30F_単価 INTO W_TANNKA;
+         IF CUR_Z30F_単価%FOUND THEN
+            WZ30F_REC.単価  :=  W_TANNKA;
+         END IF;
+         CLOSE CUR_Z30F_単価;
+         */
+        --MODIFIED BY SUKB 20130906 START
+         /*
+         OPEN CUR_Z30F_最新(WZ30F_REC.filler10);
+         FETCH CUR_Z30F_最新 INTO W_Z30F最新_REC;
+         IF CUR_Z30F_最新%FOUND THEN
+         */
+         IF W_Z30F_最新_FLG = 1 THEN
+        --MODIFIED BY SUKB 20130906 END
+            WZ30F_REC.単価  :=  W_Z30F最新_REC.単価;
+            WZ30F_REC.FILLER30 :=  W_Z30F最新_REC.FILLER30;
+         END IF;
+         --CLOSE CUR_Z30F_最新; --MODIFIED BY SUKB 20130906 START
+         -- MODIFIED BY XIAXUE 20130227 END
+    END IF;
+-- 仕様変更689 MODIFIED BY XIAXUE 20130508 START
+    --MODIFIED BY SUKB 201301024 START
+    --IF RTRIM(WZ30F_REC.発生元プログラム) = 'CYG_E60_100E' OR RTRIM(WZ30F_REC.発生元プログラム)= 'CYG_E30_100E' OR RTRIM(WZ30F_REC.発生元プログラム)= 'CYG_E80_100E' THEN
+    --MODIFIED BY ZHUSAI 20140106 
+    --IF RTRIM(WZ30F_REC.発生元プログラム) = 'CYG_E60_100E' OR RTRIM(WZ30F_REC.発生元プログラム)= 'CYG_E30_100E' OR RTRIM(WZ30F_REC.発生元プログラム)= 'CYG_E80_100E'  OR RTRIM(WZ30F_REC.発生元プログラム)= 'CYG_E80_200E' THEN
+    --MODIFIED BY XIAXUE 20140129 START
+    --IF RTRIM(WZ30F_REC.発生元プログラム) = 'CYG_E60_100E' OR RTRIM(WZ30F_REC.発生元プログラム)= 'CYG_E30_100E' OR RTRIM(WZ30F_REC.発生元プログラム)= 'CYG_E80_100E'  OR RTRIM(WZ30F_REC.発生元プログラム)= 'CYG_E80_200E' OR RTRIM(WZ30F_REC.発生元プログラム)= 'CYG_H30_B00E' THEN
+    IF (RTRIM(WZ30F_REC.品目K) = 'G' AND (RTRIM(WZ30F_REC.発生元プログラム) = 'CYG_E60_100E' OR RTRIM(WZ30F_REC.発生元プログラム)= 'CYG_E30_100E' OR RTRIM(WZ30F_REC.発生元プログラム)= 'CYG_E80_100E'  OR RTRIM(WZ30F_REC.発生元プログラム)= 'CYG_E80_200E')) OR 
+       (RTRIM(WZ30F_REC.品目K) <> 'G' AND RTRIM(WZ30F_REC.発生元プログラム) = 'CYG_H30_B00E') THEN
+    --MODIFIED BY XIAXUE 20140129 END
+    --MODIFIED BY SUKB 201301024 END
+           WZ30F_REC.メーカーLOTNO := WZ30F_REC.メーカーLOTNO;
+    ELSE
+        --MODIFIED BY SUKB 20130906 START
+         /*
+         OPEN CUR_Z30F_最新(WZ30F_REC.filler10);
+         FETCH CUR_Z30F_最新 INTO W_Z30F最新_REC;
+         IF CUR_Z30F_最新%FOUND THEN
+         */
+         IF W_Z30F_最新_FLG = 1 THEN
+        --MODIFIED BY SUKB 20130906 END
+            WZ30F_REC.メーカーLOTNO := W_Z30F最新_REC.メーカーLOTNO;
+         ELSE
+            WZ30F_REC.メーカーLOTNO := ' ';
+         END IF;
+         -- CLOSE CUR_Z30F_最新; --MODIFIED BY SUKB 20130906 START
+    END IF;
+    --20141230 ADDED BY ZHUSAI BEGIN
+    IF RTRIM(WZ30F_REC.品目K) = 'G' AND W_Z30F_最新_FLG =1 THEN
+        WZ30F_REC.明細NO   := W_Z30F最新_REC.明細NO;
+        WZ30F_REC.工程C    := W_Z30F最新_REC.工程C;
+        WZ30F_REC.印刷NO   := W_Z30F最新_REC.印刷NO;
+        WZ30F_REC.スリットNO  := W_Z30F最新_REC.スリットNO;
+        WZ30F_REC.分割NO   := W_Z30F最新_REC.分割NO;
+        WZ30F_REC.通しNO    := W_Z30F最新_REC.通しNO;
+    END IF;
+    --20141230 ADDED BY ZHUSAI END
+-- 仕様変更689 MODIFIED BY XIAXUE 20130508 END
+-- ADDED BY SUKB 20130906 START
+    --MODIFIED BY XIAXUE 20140314 START
+    --IF RTRIM(WZ30F_REC.発生元プログラム) = 'CYG_Z40_400E' OR RTRIM(WZ30F_REC.発生元プログラム) = 'CYG_Z40_100E' OR RTRIM(WZ30F_REC.発生元プログラム) = 'CYG_Z40_200E' THEN
+    IF RTRIM(WZ30F_REC.発生元プログラム) = 'CYG_Z40_400E' OR RTRIM(WZ30F_REC.発生元プログラム) = 'CYG_Z40_100E' OR RTRIM(WZ30F_REC.発生元プログラム) = 'CYG_Z40_200E' OR RTRIM(WZ30F_REC.発生元プログラム) = 'KENZAI_IKOU' THEN
+    --MODIFIED BY XIAXUE 20140314 END
+           WZ30F_REC.棚番 := WZ30F_REC.棚番;
+    ELSE
+         IF W_Z30F_最新_FLG = 1 THEN
+            --WZ30F_REC.棚番 := WZ30F_REC.棚番;--MODIFIED BY XIAXUE 20140402
+            WZ30F_REC.棚番 := W_Z30F最新_REC.棚番;
+         ELSE
+            WZ30F_REC.棚番 := ' ';
+         END IF;
+    END IF;
+-- ADDED BY SUKB 20130906 END
+      --------------- 在庫受払データ追加
+
+      CYG_C00_Z30.INS_OPE( WZ30F_REC , G_ERRCD , G_ERRTX );
+      IF  G_ERRCD  <> 0  THEN  RAISE ERROR_OCCURED;  END IF;
+
+      --------------- 在庫受払予定受払判定
+      IF  WZ30F_REC.受払K  <  '8'  THEN
+        -- 20140423　不具合・仕様変更管理票1397 ADDED by XIAXUE BEGIN
+        --------------- ロット在庫管理ファイル更新判定判定
+        IF  M40M_REC.FILLER20  =  '1'  THEN
+          --------------- 在庫受払データよりロット在庫管理ファイル更新
+          CYG_C00_Z40.UPD_OPE_受払(  WZ30F_REC,        -- レコード  (在庫受払）
+                        '+',          -- 更新モード
+                        M10M_REC.当月月次締日,  -- 当月月次締日
+                        G_ERRCD,
+                        G_ERRTX);
+          IF  G_ERRCD <> 0  THEN  RAISE  ERROR_OCCURED;  END  IF;
+        END IF;
+        -- 20140423　不具合・仕様変更管理票1397 ADDED by XIAXUE END
+        --------------- 在庫受払データより在庫管理ファイル更新
+        CYG_C00_Z10.UPD_OPE_受払(  WZ30F_REC,        -- レコード  (在庫受払）
+                      '+',          -- 更新モード
+                      M10M_REC.当月月次締日,  -- 当月月次締日
+                      G_ERRCD,
+                      G_ERRTX);
+        IF  G_ERRCD <> 0  THEN  RAISE  ERROR_OCCURED;  END  IF;
+        -- 20140423　不具合・仕様変更管理票1397 DELETED by XIAXUE BEGIN
+        /*
+        --------------- ロット在庫管理ファイル更新判定判定
+        IF  M40M_REC.FILLER20  =  '1'  THEN
+          --------------- 在庫受払データよりロット在庫管理ファイル更新
+          CYG_C00_Z40.UPD_OPE_受払(  WZ30F_REC,        -- レコード  (在庫受払）
+                        '+',          -- 更新モード
+                        M10M_REC.当月月次締日,  -- 当月月次締日
+                        G_ERRCD,
+                        G_ERRTX);
+          IF  G_ERRCD <> 0  THEN  RAISE  ERROR_OCCURED;  END  IF;
+        END IF;
+        */
+        -- 20140423　不具合・仕様変更管理票1397 DELETED by XIAXUE END
+      END IF;
+    END IF;
+
+EXCEPTION
+  -------------------------------------------------------
+  --  例外処理
+  -------------------------------------------------------
+  WHEN  ERROR_OCCURED  THEN
+    IF M10M_CUR%ISOPEN THEN CLOSE M10M_CUR; END IF;
+    IF M40M_CUR%ISOPEN THEN CLOSE M40M_CUR; END IF;
+    O_ERRCD         :=  G_ERRCD;
+    O_ERRTX         :=  G_ERRTX
+              ||'CYG_C00_Z30_COMMON.Z30_INS ';
+    -- ===================================
+    -- 20110518 DELETED BY ECT LIANGHC
+    -- ===================================
+    --RAISE   ERROR_OCCURED;
+  WHEN  OTHERS  THEN
+    IF M10M_CUR%ISOPEN THEN CLOSE M10M_CUR; END IF;
+    IF M40M_CUR%ISOPEN THEN CLOSE M40M_CUR; END IF;
+    O_ERRCD         :=  SQLCODE;
+    O_ERRTX         :=  SQLERRM
+              ||'CYG_C00_Z30_COMMON.Z30_INS ';
+    -- ===================================
+    -- 20110518 DELETED BY ECT LIANGHC
+    -- ===================================
+    --RAISE   ERROR_OCCURED;
+END;
+
+ --20141230 ADDED BY ZHUSAI EBGIN 
+    --==========================================================================
+    -- Name   : Z40_DEL
+    -- Desc   : Z40Fを削除します
+    -- History: 2014/12/30  ECT ZHUSAI  CREATED
+    -- Note   :
+    --==========================================================================
