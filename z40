@@ -1,0 +1,117 @@
+PROCEDURE UPD_OPE(
+         P_REC      IN OUT  CYG_Z40F%ROWTYPE,       -- レコード
+        P_ERRCD     IN OUT  NUMBER,
+        P_ERRTX     IN OUT  VARCHAR2)
+        IS
+BEGIN
+  UPDATE CYG_Z40F SET
+
+    場所C     =  P_REC.場所C  ,
+    X31     =  P_REC.X31  ,
+    品目K     =  P_REC.品目K  ,
+    品目C     =  P_REC.品目C  ,
+--@@CYG ↓↓↓
+    在庫理由K  =   P_REC.在庫理由K  ,
+    荷姿    =   P_REC.荷姿    ,
+    明細NO     =   P_REC.明細NO  ,
+    工程C     =   P_REC.工程C    ,
+--@@CYG ↑↑↑
+    LOTNO     =  P_REC.LOTNO    ,
+    FILLER10   =  P_REC.FILLER10  ,
+    前月在庫数  =  P_REC.前月在庫数  ,
+    前月在庫単価  =  P_REC.前月在庫単価,
+    前月在庫金額  =  P_REC.前月在庫金額,
+--@@CYG ↓↓↓
+    前月在庫荷姿数  =  P_REC.前月在庫荷姿数  ,
+--@@CYG ↑↑↑
+    FILLER20   =  P_REC.FILLER20  ,
+    当月入庫1  =  P_REC.当月入庫1  ,
+    当月入庫2  =  P_REC.当月入庫2  ,
+    当月入庫3  =  P_REC.当月入庫3  ,
+    当月入庫4  =  P_REC.当月入庫4  ,
+    当月入庫5  =  P_REC.当月入庫5  ,
+    当月入庫6  =  P_REC.当月入庫6  ,
+    当月入庫7  =  P_REC.当月入庫7  ,
+    当月入庫8  =  P_REC.当月入庫8  ,
+    当月入庫9  =  P_REC.当月入庫9  ,
+    当月入庫10  =  P_REC.当月入庫10  ,
+--@@CYG ↓↓↓
+    当月入庫荷姿数  =  P_REC.当月入庫荷姿数  ,
+--@@CYG ↑↑↑
+    FILLER30   =  P_REC.FILLER30  ,
+    当月出庫1  =  P_REC.当月出庫1  ,
+    当月出庫2  =  P_REC.当月出庫2  ,
+    当月出庫3  =  P_REC.当月出庫3  ,
+    当月出庫4  =  P_REC.当月出庫4  ,
+    当月出庫5  =  P_REC.当月出庫5  ,
+    当月出庫6  =  P_REC.当月出庫6  ,
+    当月出庫7  =  P_REC.当月出庫7  ,
+    当月出庫8  =  P_REC.当月出庫8  ,
+    当月出庫9  =  P_REC.当月出庫9  ,
+    当月出庫10  =  P_REC.当月出庫10  ,
+--@@CYG ↓↓↓
+    当月出庫荷姿数  =  P_REC.当月出庫荷姿数  ,
+--@@CYG ↑↑↑
+    FILLER40   =  P_REC.FILLER40  ,
+    翌月入庫  =  P_REC.翌月入庫  ,
+    翌月出庫  =  P_REC.翌月出庫  ,
+--@@CYG ↓↓↓
+--    翌々月入庫  =  P_REC.翌々月入庫  ,
+--    翌々月出庫  =  P_REC.翌々月出庫  ,
+    翌月入庫荷姿数  =  P_REC.翌月入庫荷姿数  ,
+    翌月出庫荷姿数  =  P_REC.翌月出庫荷姿数  ,
+--@@CYG ↑↑↑
+    FILLER50   =  P_REC.FILLER50  ,
+    入庫予定_計画残  =  P_REC.入庫予定_計画残,
+    入庫予定_発注残  =  P_REC.入庫予定_発注残,
+    入庫予定_予備3  =  P_REC.入庫予定_予備3,
+    入庫予定_予備4  =  P_REC.入庫予定_予備4,
+    入庫予定_予備5  =  P_REC.入庫予定_予備5,
+    出庫引当_受注残  =  P_REC.出庫引当_受注残,
+    出庫引当_指図残  =  P_REC.出庫引当_指図残,
+    出庫引当_予備8  =  P_REC.出庫引当_予備8,
+    出庫引当_予備9  =  P_REC.出庫引当_予備9,
+    出庫引当_予備10  =  P_REC.出庫引当_予備10,
+    備考1     =  P_REC.備考1     ,
+    備考2     =  P_REC.備考2     ,
+    FILLER60   =  P_REC.FILLER60  ,
+    最終入庫日   =  P_REC.最終入庫日  ,
+    最終出庫日   =  P_REC.最終出庫日  ,
+    最終棚卸日   =  P_REC.最終棚卸日  ,
+    在庫締日   =  P_REC.在庫締日  ,
+    月次締日   =  P_REC.月次締日  ,
+    新規登録日   =  P_REC.新規登録日  ,
+    最終変更日   =  P_REC.最終変更日  ,
+    有効期限   =  P_REC.有効期限,
+--@@CYG ↓↓↓
+  　　印刷NO     =   P_REC.印刷NO  ,
+  　　スリットNO   =   P_REC.スリットNO  ,
+  　　分割NO     =   P_REC.分割NO  ,
+  　　通しNO     =   P_REC.通しNO  ,
+  　　XZ2       =   P_REC.XZ2  ,
+  　　状態K     =   P_REC.状態K  ,
+  　　梱包LOT1   =   P_REC.梱包LOT1  ,
+  　　梱包LOT2   =   P_REC.梱包LOT2  ,
+  　　製番     =   P_REC.製番       ,
+  　　原反K     =   P_REC.原反K  ,
+  　　用紙K     =   P_REC.用紙K  ,
+  　　原反状態K   =   P_REC.原反状態K  ,
+  　　原反品質K   =   P_REC.原反品質K  ,
+     単価        =   P_REC.単価 ,-- ADDED BY LIYL 20130106
+     含浸ロットNO   =   P_REC.含浸ロットNO,  -- 2013/03/21  ECT LVLU ADD
+     メーカーLOTNO = P_REC.メーカーLOTNO, --2013/04/24 ADDED BY XIAXUE
+        棚番 = P_REC.棚番 --2013/09/06 ADDED BY SUKB
+--@@CYG ↑↑↑
+    WHERE   場所C    =  P_REC.場所C
+      AND  X31      =  P_REC.X31
+      AND  品目K    =  P_REC.品目K
+      AND  品目C    =  P_REC.品目C
+--@@CYG ↓↓↓
+      AND  在庫理由K  =  P_REC.在庫理由K
+      AND  荷姿    =  P_REC.荷姿
+      AND  明細NO    =  P_REC.明細NO
+      AND  工程C    =  P_REC.工程C
+--@@CYG ↑↑↑
+      AND  LOTNO    =  P_REC.LOTNO
+        ;
+EXCEPTION
